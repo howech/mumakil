@@ -1,0 +1,8 @@
+
+- blow away all trace of cassandra (/usr/local/share/cassandra)
+- both machines have cassandra installed by chef
+- move config file from magilla over
+- change only what is needed on chimpmark
+- on magilla, when config is reloaed, set replication factor = 1
+- 
+- 
