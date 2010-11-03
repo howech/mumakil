@@ -52,10 +52,8 @@ public class CassandraBulkLoader extends Configured implements Tool {
         private ColumnFamily columnFamily;
         private String keyspace;
         private String cfName;
-        private String cassandraYaml;
         private Integer keyField;
         private Integer tsField;
-        private String[] configPaths;
         private String[] fieldNames;
 
 
@@ -86,22 +84,18 @@ public class CassandraBulkLoader extends Configured implements Tool {
             Message message = createMessage(keyspace, fields[keyField].getBytes("UTF-8"), cfName, columnFamilyList);
             List<IAsyncResult> results = new ArrayList<IAsyncResult>();
             for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, fields[keyField].getBytes())) {
-                System.out.println("Sending record ["+fields[keyField]+"] to endpoint {"+endpoint+"}");
                 results.add(MessagingService.instance.sendRR(message, endpoint));
-                break;
             }
             
-            /* Wait for acks */
-            for (IAsyncResult result : results) {
-                try {
-                    System.out.println("rpc timeout in ms: "+DatabaseDescriptor.getRpcTimeout());
-                    result.get(DatabaseDescriptor.getRpcTimeout(), TimeUnit.MILLISECONDS);
-                } catch (TimeoutException e) {
-                    /* We should retry here */
-                    throw new RuntimeException(e);
-                }
-            }
-            // output.collect(new Text(fields[keyField]), new Text(" inserted into Cassandra node(s)"));
+            // /* Wait for acks */
+            // for (IAsyncResult result : results) {
+            //     try {
+            //         result.get(DatabaseDescriptor.getRpcTimeout(), TimeUnit.MILLISECONDS);
+            //     } catch (TimeoutException e) {
+            //         /* We should retry here */
+            //         throw new RuntimeException(e);
+            //     }
+            // }
         }
 
         /*
@@ -112,22 +106,19 @@ public class CassandraBulkLoader extends Configured implements Tool {
             this.jobconf      = job;
             this.keyspace     = job.get("cassandra.keyspace");
             this.cfName       = job.get("cassandra.column_family");
-            this.configPaths  = job.get("cassandra.config").split(",");
             this.fieldNames   = job.get("cassandra.field_names").split(",");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
-            System.out.println("Using field ["+keyField+"] as row key");
+
+            /* Deal with custom timestamp field */
             try {
                 this.tsField   = Integer.parseInt(job.get("cassandra.timestamp_field"));
             } catch (NumberFormatException e) {
                 this.tsField = -1;
             }
-
-            // Fetch map task number
-            Integer mapNumber = Integer.parseInt(job.get("mapred.task.partition"));
-
-            // Check to see if the storage port we've chosen is in use, if so move to another
-            this.cassandraYaml = configPaths[mapNumber];
-            System.setProperty("cassandra.config", cassandraYaml);
+            
+            System.out.println("Using field ["+keyField+"] as row key");
+            /* Set cassandra config file (cassandra.yaml) */
+            System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {
                 init_cassandra();
@@ -254,7 +245,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
         JobConf conf                = new JobConf(getConf(), CassandraBulkLoader.class);
         GenericOptionsParser parser = new GenericOptionsParser(conf,args);
 
-        conf.setJobName("The Real Deal CassandraBulkLoader");
+        conf.setJobName("CassandraBulkLoader");
         conf.setMapperClass(Map.class);
         conf.setNumReduceTasks(0);
         conf.setOutputKeyClass(Text.class);
