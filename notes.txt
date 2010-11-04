@@ -1,0 +1,5 @@
+. be aware of the python eggs, simplejson and avro, fucking up. mj-each to easy_install them manually
+. rm -r /data (it's a link)
+. the current hadoop install puts a deprecated version of the jackson json library in it's lib dir
+  and loads classes from that preferentially. the cassandra bulkloader requires a newer version > 1.4
+  to fix just (rm /usr/lib/hadoop/lib/*jackson*.jar, cp /usr/local/share/cassandra/lib/*jackson*.jar /usr/lib/hadoop/lib/)

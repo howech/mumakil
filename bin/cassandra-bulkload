@@ -10,6 +10,7 @@ Settings.define :ks,               :default => "Keyspace1",                     
 Settings.define :cf,               :default => "Standard1",                          :description => "Cassandra Column Family to write to"
 Settings.define :min_split_size,   :default => "100000",                             :description => "Hadoop min split size"
 Settings.define :key_field,        :default => "0",                                  :description => "Starting from 0, which field to use as the row key"
+Settings.define :sub_key_field,                                                      :description => "Indicates the row key when inserting into supercolumns, leave blank otherwise"
 Settings.define :ts_field,                                                           :description => "What field, if any, should be used as the timestamp"
 Settings.define :cassandra_config, :default => "/etc/cassandra/cassandra.yaml",      :description => "Full path to cassandra.yaml properties file"
 Settings.define :hadoop_home,      :default => "/usr/lib/hadoop",                    :env_var => "HADOOP_HOME",    :description => "Path to hadoop installation"
@@ -17,6 +18,8 @@ Settings.define :cassandra_home,   :default => "/usr/local/share/cassandra",    
 Settings.define :field_names,      :default => "rsrc,tweet_id,created_at,user_id,screen_name,search_id,in_reply_to_user_id,in_reply_to_screen_name,in_reply_to_search_id,in_reply_to_status_id,text,source,lang,lat,lng,retweeted_count,rt_of_user_id,rt_of_screen_name,rt_of_tweet_id,contributors"
 Settings.define :nil_outfile,      :default => "/tmp/cassandra_bulkloader/nil.out", :description => "We need an output path even if we dont write anything to it"
 Settings.resolve!
+
+raise "No input file specified." if Settings.rest.first.blank?
 
 class CassandraBulkLoader
   attr_accessor :options
@@ -37,6 +40,7 @@ class CassandraBulkLoader
       "-Dcassandra.row_key_field=#{options.key_field}",
       "-Dcassandra.field_names=#{options.field_names}",
       timestamp,
+      sub_key_field,
       "-Dmapred.min.split.size=#{options.min_split_size}",
       "-libjars #{libjars}",
       "#{options.rest.first}",
@@ -73,6 +77,11 @@ class CassandraBulkLoader
   def timestamp
     return unless options.ts_field
     "-Dcassandra.timestamp_field=#{options.ts_field}"
+  end
+
+  def sub_key_field
+    return unless options.sub_key_field
+    "-Dcassandra.sub_key_field=#{options.sub_key_field}"
   end
 
 end

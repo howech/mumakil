@@ -53,9 +53,9 @@ public class CassandraBulkLoader extends Configured implements Tool {
         private String keyspace;
         private String cfName;
         private Integer keyField;
+        private Integer subKeyField;
         private Integer tsField;
         private String[] fieldNames;
-
 
         public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 
@@ -70,13 +70,28 @@ public class CassandraBulkLoader extends Configured implements Tool {
                 timeStamp = Long.parseLong(fields[tsField]);
             }
 
-            /* Create linked list of column families, this will hold only one column family */
+            /* Create linked list of column families, this will hold only one column family */            
             List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
             columnFamily = ColumnFamily.create(keyspace, cfName);
-            for(int i = 0; i < fields.length; i++) {
-                if (i < fieldNames.length) {
-                    columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+            
+            /* Is this a super column insertion? */
+            if (subKeyField == -1) {
+              
+              /* Insert single row with many normal columns */
+              for(int i = 0; i < fields.length; i++) {
+                if (i < fieldNames.length && i != keyField) {
+                  columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
                 }
+              }
+              
+            } else {
+              String superColName = fields[subKeyField];
+              for(int i = 0; i < fields.length; i++) {
+                if (i < fieldNames.length && i != keyField && i != subKeyField) {
+                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+                }
+              }
+
             }
             columnFamilyList.add(columnFamily);
             
@@ -84,18 +99,10 @@ public class CassandraBulkLoader extends Configured implements Tool {
             Message message = createMessage(keyspace, fields[keyField].getBytes("UTF-8"), cfName, columnFamilyList);
             List<IAsyncResult> results = new ArrayList<IAsyncResult>();
             for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, fields[keyField].getBytes())) {
-                results.add(MessagingService.instance.sendRR(message, endpoint));
+              results.add(MessagingService.instance.sendRR(message, endpoint));
             }
             
-            // /* Wait for acks */
-            // for (IAsyncResult result : results) {
-            //     try {
-            //         result.get(DatabaseDescriptor.getRpcTimeout(), TimeUnit.MILLISECONDS);
-            //     } catch (TimeoutException e) {
-            //         /* We should retry here */
-            //         throw new RuntimeException(e);
-            //     }
-            // }
+
         }
 
         /*
@@ -111,9 +118,16 @@ public class CassandraBulkLoader extends Configured implements Tool {
 
             /* Deal with custom timestamp field */
             try {
-                this.tsField   = Integer.parseInt(job.get("cassandra.timestamp_field"));
+                this.tsField = Integer.parseInt(job.get("cassandra.timestamp_field"));
             } catch (NumberFormatException e) {
                 this.tsField = -1;
+            }
+
+            /* Are we going to be making super column insertions? */
+            try {
+              this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
+            } catch (NumberFormatException e) {
+              this.subKeyField = -1;
             }
             
             System.out.println("Using field ["+keyField+"] as row key");
