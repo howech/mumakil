@@ -85,10 +85,12 @@ public class CassandraBulkLoader extends Configured implements Tool {
               }
               
             } else {
+              /* FIXME: you'll get an array index error if you don't have a column value. You should always have one, but ...*/
               String superColName = fields[subKeyField];
-              for(int i = 0; i < fields.length; i++) {
-                if (i < fieldNames.length && i != keyField && i != subKeyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+              for(int i = 0; i < fields.length-1; i++) {
+                if (i != keyField && i != subKeyField) {
+                  System.out.println("Insert: cf ["+cfName+"] key ["+fields[keyField]+"] super_name ["+superColName+"] col_name ["+fields[i]+"] col_val ["+fields[i+1]+"]");
+                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fields[i].getBytes("UTF-8")), fields[i+1].getBytes("UTF-8"), new TimestampClock(timeStamp));
                 }
               }
 
@@ -131,6 +133,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
             }
             
             System.out.println("Using field ["+keyField+"] as row key");
+            System.out.println("Using field ["+subKeyField+"] as sub row key");
             /* Set cassandra config file (cassandra.yaml) */
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             

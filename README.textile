@@ -3,23 +3,22 @@ h1. Cassandra Bulk Loader
 This is minimum viable at the moment and here's why:
 
 * For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an 'address already in use' exception. Once I can figure out how to set the internal storage port from inside the map task this will be fixed.
-* Only supports regular 'row_key => {column_name => value}' type insertions. That means no super columns.
-* Requires that your data is of the form 'key \t json_string' where json_string is an unnested set of key-value pairs
+* SuperColumn support appears to not be working ?
 
 CassandraBulkLoader runs a storage client embedded inside each map task. As such, no data will remain on the node running the map task. Instead the storage client serializes your data in a binary form and sends it _directly_ to the node(s) that's going to own it. The server simply stores this data in its own binary memtable and does no work on it other than flushing it to disk when the memtable has reached @binary_memtable_throughput_in_mb@.
 
 h2. Usage:
 
-Say you've got a dataset on the hdfs called @/tmp/trstrank.tsv@. It looks like
+Say you've got a dataset on the _hdfs_ called @/tmp/trstrank.tsv@. It looks like
 
-1234   {"screen_name":"joe_bob","trstrank":7,"tq":13}
+1234   joe_bob     7     13
 
-and so on,
+and so on with column names (user_id, screen_name, trstrank, trust_quotient)
 
 then all you've got to do is:
 
 <pre><code>
-  bin/cassandra-bulkload --ks=SocNetTw --cf=Trstrank /tmp/trstrank.tsv
+  bin/cassandra-bulkload --ks=soc_net_tw --cf=Trstrank --key_field=1 --field_names=user_id,screen_name,trstrank,trust_quotient /tmp/trstrank.tsv
 </code></pre>
 
 where @ks@ is obviously the keyspace and @cf@ is the column family.
@@ -27,7 +26,8 @@ where @ks@ is obviously the keyspace and @cf@ is the column family.
 Now, just so you're happy and not confused and the world is a nice place, you're going to want to flush the keyspace you dumped into and possibly even restart the daemons.
 
 <pre><code>
-nodetool -h localhost flush SocNetTw
+$CASSANDRA_HOME/bin/nodetool -h `hostnam -i` flush soc_net_tw 
 </code></pre>
 
+Sometimes this it takes a long time for the data to be queryable. Don't worry, it does show up.
 Bye.

@@ -1,5 +1,12 @@
+. export CASSANDRA_HOME=/usr/local/share/cassandra
 . be aware of the python eggs, simplejson and avro, fucking up. mj-each to easy_install them manually
 . rm -r /data (it's a link)
+. let cassandra run a bit to copy over schema information. then kill it (sudo service cassandra stop) and
+  chown everything to hadoop (sudo chown -R hadoop:admin /data/db/cassandra; sudo chown -R hadoop:admin /var/{lib,log}/cassandra)
 . the current hadoop install puts a deprecated version of the jackson json library in it's lib dir
   and loads classes from that preferentially. the cassandra bulkloader requires a newer version > 1.4
   to fix just (rm /usr/lib/hadoop/lib/*jackson*.jar, cp /usr/local/share/cassandra/lib/*jackson*.jar /usr/lib/hadoop/lib/)
+. remember to set max_map_tasks to 1
+. flush before using (mj-each magilla "/usr/local/share/cassandra/bin/nodetool --host `hostname -i` -p 12345 flush soc_net_tw")
+. compact if you doubly inserted (mj-each magilla "/usr/local/share/cassandra/bin/nodetool --host `hostname -i` -p 12345 compact soc_net_tw")
+. info (sudo /usr/local/share/cassandra/bin/nodetool --host 10.204.30.11 -p 12345 info soc_net_tw)
