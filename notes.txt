@@ -10,3 +10,4 @@
 . flush before using (mj-each magilla "/usr/local/share/cassandra/bin/nodetool --host `hostname -i` -p 12345 flush soc_net_tw")
 . compact if you doubly inserted (mj-each magilla "/usr/local/share/cassandra/bin/nodetool --host `hostname -i` -p 12345 compact soc_net_tw")
 . info (sudo /usr/local/share/cassandra/bin/nodetool --host 10.204.30.11 -p 12345 info soc_net_tw)
+. need a --skip flag

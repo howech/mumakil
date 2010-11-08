@@ -29,14 +29,7 @@ import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 
-/*
-
-  First of all we expect a comma separated list of field names to be passed in via '-Dcassandra.field_names=...'. With this
-  we read in lines from the hdfs path expecting that each record adheres to this schema. This record is inserted directly
-  into cassandra, no thrift.
-
- */
-public class CassandraBulkLoader extends Configured implements Tool {
+public class CassandraColumnLoader extends Configured implements Tool {
     public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
         
         private JobConf jobconf;
@@ -45,22 +38,12 @@ public class CassandraBulkLoader extends Configured implements Tool {
         private String cfName;
         private Integer keyField;
         private Integer subKeyField;
-        private Integer tsField;
-        private String[] fieldNames;
-
+        
         public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 
             /* Split the line into fields */
             String[] fields = value.toString().split("\t");
             
-            /* Handle custom timestamp for all columns */
-            Long timeStamp;
-            if (tsField == -1) {
-                timeStamp = System.currentTimeMillis();
-            } else {
-                timeStamp = Long.parseLong(fields[tsField]);
-            }
-
             /* Create linked list of column families, this will hold only one column family */            
             List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
             columnFamily = ColumnFamily.create(keyspace, cfName);
@@ -70,17 +53,16 @@ public class CassandraBulkLoader extends Configured implements Tool {
               
               /* Insert single row with many normal columns */
               for(int i = 0; i < fields.length; i++) {
-                if (i < fieldNames.length && i != keyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+                if (i != keyField) {
+                  columnFamily.addColumn(new QueryPath(cfName, null, fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
                 }
               }
               
             } else {
-              /* FIXME: you'll get an array index error if you don't have a column value. You should always have one, but ...*/
               String superColName = fields[subKeyField];
               for(int i = 0; i < fields.length-1; i++) {
                 if (i != keyField && i != subKeyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fields[i].getBytes("UTF-8")), fields[i+1].getBytes("UTF-8"), new TimestampClock(timeStamp));
+                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
                 }
               }
 
@@ -103,15 +85,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
             this.jobconf      = job;
             this.keyspace     = job.get("cassandra.keyspace");
             this.cfName       = job.get("cassandra.column_family");
-            this.fieldNames   = job.get("cassandra.field_names").split(",");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
-
-            /* Deal with custom timestamp field */
-            try {
-                this.tsField = Integer.parseInt(job.get("cassandra.timestamp_field"));
-            } catch (NumberFormatException e) {
-                this.tsField = -1;
-            }
 
             /* Are we going to be making super column insertions? */
             try {
@@ -127,7 +101,6 @@ public class CassandraBulkLoader extends Configured implements Tool {
             
             try {
               CassandraStorageClient.init();
-                // init_cassandra();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -147,10 +120,10 @@ public class CassandraBulkLoader extends Configured implements Tool {
      *  Interprets commandline args, sets configuration, and actually runs the job
      */
     public int run(String[] args) {
-        JobConf conf                = new JobConf(getConf(), CassandraBulkLoader.class);
+        JobConf conf                = new JobConf(getConf(), CassandraColumnLoader.class);
         GenericOptionsParser parser = new GenericOptionsParser(conf,args);
 
-        conf.setJobName("CassandraTableLoader");
+        conf.setJobName("CassandraColumnLoader");
         conf.setMapperClass(Map.class);
         conf.setNumReduceTasks(0);
         conf.setOutputKeyClass(Text.class);
@@ -178,7 +151,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
     *  for free.
     */
     public static void main(String[] args) throws Exception {
-        int res = ToolRunner.run(new Configuration(), new CassandraBulkLoader(), args);
+        int res = ToolRunner.run(new Configuration(), new CassandraColumnLoader(), args);
         System.exit(res);
     }
 }
