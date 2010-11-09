@@ -4,6 +4,8 @@ require 'rubygems'
 require 'wukong'
 require 'configliere' ; Configliere.use(:commandline, :env_var, :define)
 
+# bin/cassandra-bulkload --table --key_field=1 --ks=soc_net_tw --cf=TwitterUser --col_names=rsrc,user_id,scraped_at,screen_name,protected,followers_count,friends_count,statuses_count,favourites_count,created_at,sid,is_full,health /tmp/twitter_user_id
+
 Settings.define :ks,               :default => "Keyspace1",                          :description => "Cassandra Keyspace to write data to"
 Settings.define :cf,               :default => "Standard1",                          :description => "Cassandra Column Family to write to"
 Settings.define :min_split_size,   :default => "100000",                             :description => "Hadoop min split size"
