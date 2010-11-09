@@ -7,17 +7,21 @@ require 'configliere' ; Configliere.use(:commandline, :env_var, :define)
 Settings.define :ks,               :default => "Keyspace1",                          :description => "Cassandra Keyspace to write data to"
 Settings.define :cf,               :default => "Standard1",                          :description => "Cassandra Column Family to write to"
 Settings.define :min_split_size,   :default => "100000",                             :description => "Hadoop min split size"
+Settings.define :cassandra_config, :default => "/etc/cassandra/cassandra.yaml",      :description => "Full path to cassandra.yaml properties file. Assumes nfs at the moment"
 Settings.define :key_field,        :default => "0",                                  :description => "Starting from 0, which field to use as the row key"
-Settings.define :sub_key_field,                                                      :description => "Indicates the row key when inserting into supercolumns, leave blank otherwise"
+Settings.define :sub_key_field,                                                      :description => "Starting from 0, which field to use as super column name, leave blank otherwise"
 Settings.define :ts_field,                                                           :description => "What field, if any, should be used as the timestamp"
-Settings.define :cassandra_config, :default => "/etc/cassandra/cassandra.yaml",      :description => "Full path to cassandra.yaml properties file"
 Settings.define :hadoop_home,      :default => "/usr/lib/hadoop",                    :env_var => "HADOOP_HOME",    :description => "Path to hadoop installation"
 Settings.define :cassandra_home,   :default => "/usr/local/share/cassandra",         :env_var => "CASSANDRA_HOME", :description => "Path to cassandra installation"
-Settings.define :field_names,      :default => "rsrc,tweet_id,created_at,user_id,screen_name,search_id,in_reply_to_user_id,in_reply_to_screen_name,in_reply_to_search_id,in_reply_to_status_id,text,source,lang,lat,lng,retweeted_count,rt_of_user_id,rt_of_screen_name,rt_of_tweet_id,contributors"
-Settings.define :nil_outfile,      :default => "/tmp/cassandra_bulkloader/nil.out", :description => "We need an output path even if we dont write anything to it"
+Settings.define :col_names,        :default => "rsrc,tweet_id,created_at,user_id,screen_name,search_id,in_reply_to_user_id,in_reply_to_screen_name,in_reply_to_search_id,in_reply_to_status_id,text,source,lang,lat,lng,retweeted_count,rt_of_user_id,rt_of_screen_name,rt_of_tweet_id,contributors"
+Settings.define :nil_outfile,      :default => "/tmp/cassandra_bulkloader/nil.out", :description => "Hdfs path where nothing is actually written."
+Settings.define :table,            :default => false,                               :description => "Indicates if this is a flat table insertion"
+Settings.define :columns,          :default => false,                               :description => "Indicates if this is a columns insertion"
 Settings.resolve!
 
 raise "No input file specified." if Settings.rest.first.blank?
+raise "You must pick either columns or table, not both." if (Settings.table && Settings.columns)
+raise "You must pick either columns or table." if (!Settings.table && !Settings.columns)
 
 class CassandraBulkLoader
   attr_accessor :options
@@ -31,12 +35,12 @@ class CassandraBulkLoader
     hadoop_cmd = [
       "HADOOP_CLASSPATH=#{hadoop_classpath}",
       "#{options.hadoop_home}/bin/hadoop jar #{run_jar}",
-      "CassandraBulkLoader",
+      mainclass,
       "-Dcassandra.config=file://#{options.cassandra_config}",
       "-Dcassandra.keyspace=#{options.ks}",
       "-Dcassandra.column_family=#{options.cf}",
       "-Dcassandra.row_key_field=#{options.key_field}",
-      "-Dcassandra.field_names=#{options.field_names}",
+      "-Dcassandra.col_names=#{options.col_names}",
       timestamp,
       sub_key_field,
       "-Dmapred.min.split.size=#{options.min_split_size}",
@@ -45,7 +49,7 @@ class CassandraBulkLoader
       "#{options.nil_outfile}"
     ].flatten.compact.join(" \t\\\n  ")
     system %Q{ echo #{hadoop_cmd} }
-    system %Q{ #{hadoop_cmd} }
+    # system %Q{ #{hadoop_cmd} }
   end
 
   def remove_nil_outfile
@@ -80,6 +84,11 @@ class CassandraBulkLoader
   def sub_key_field
     return unless options.sub_key_field
     "-Dcassandra.sub_key_field=#{options.sub_key_field}"
+  end
+
+  def mainclass
+    return "CassandraTableLoader"  if options.table
+    return "CassandraColumnLoader" if options.columns
   end
 
 end

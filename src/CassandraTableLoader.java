@@ -31,12 +31,12 @@ import org.apache.cassandra.utils.FBUtilities;
 
 /*
 
-  First of all we expect a comma separated list of field names to be passed in via '-Dcassandra.field_names=...'. With this
+  First of all we expect a comma separated list of field names to be passed in via '-Dcassandra.col_names=...'. With this
   we read in lines from the hdfs path expecting that each record adheres to this schema. This record is inserted directly
   into cassandra, no thrift.
 
  */
-public class CassandraBulkLoader extends Configured implements Tool {
+public class CassandraTableLoader extends Configured implements Tool {
     public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
         
         private JobConf jobconf;
@@ -103,7 +103,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
             this.jobconf      = job;
             this.keyspace     = job.get("cassandra.keyspace");
             this.cfName       = job.get("cassandra.column_family");
-            this.fieldNames   = job.get("cassandra.field_names").split(",");
+            this.fieldNames   = job.get("cassandra.col_names").split(",");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
 
             /* Deal with custom timestamp field */
@@ -147,7 +147,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
      *  Interprets commandline args, sets configuration, and actually runs the job
      */
     public int run(String[] args) {
-        JobConf conf                = new JobConf(getConf(), CassandraBulkLoader.class);
+        JobConf conf                = new JobConf(getConf(), CassandraTableLoader.class);
         GenericOptionsParser parser = new GenericOptionsParser(conf,args);
 
         conf.setJobName("CassandraTableLoader");
@@ -178,7 +178,7 @@ public class CassandraBulkLoader extends Configured implements Tool {
     *  for free.
     */
     public static void main(String[] args) throws Exception {
-        int res = ToolRunner.run(new Configuration(), new CassandraBulkLoader(), args);
+        int res = ToolRunner.run(new Configuration(), new CassandraTableLoader(), args);
         System.exit(res);
     }
 }
