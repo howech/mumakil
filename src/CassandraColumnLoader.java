@@ -51,20 +51,21 @@ public class CassandraColumnLoader extends Configured implements Tool {
             /* Is this a super column insertion? */
             if (subKeyField == -1) {
               
-              /* Insert single row with many normal columns */
-              for(int i = 0; i < fields.length; i++) {
-                if (i != keyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, null, fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
+                /* Insert single row with many normal columns */
+                for(int i = 0; i < fields.length; i++) {
+                    if (i != keyField) {
+                        System.out.println("Adding column to ["+cfName+"]with row_key:["+fields[keyField]+"] column_name:["+fields[i]+"] and column_value:[0]");
+                        columnFamily.addColumn(new QueryPath(cfName, null, fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
+                    }
                 }
-              }
               
             } else {
-              String superColName = fields[subKeyField];
-              for(int i = 0; i < fields.length-1; i++) {
-                if (i != keyField && i != subKeyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
+                String superColName = fields[subKeyField];
+                for(int i = 0; i < fields.length-1; i++) {
+                    if (i != keyField && i != subKeyField) {
+                        columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
+                    }
                 }
-              }
 
             }
             columnFamilyList.add(columnFamily);
@@ -73,7 +74,7 @@ public class CassandraColumnLoader extends Configured implements Tool {
             Message message = MemtableMessenger.createMessage(keyspace, fields[keyField].getBytes("UTF-8"), cfName, columnFamilyList);
             List<IAsyncResult> results = new ArrayList<IAsyncResult>();
             for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, fields[keyField].getBytes())) {
-              results.add(MessagingService.instance.sendRR(message, endpoint));
+                results.add(MessagingService.instance.sendRR(message, endpoint));
             }
         }
 
@@ -89,9 +90,9 @@ public class CassandraColumnLoader extends Configured implements Tool {
 
             /* Are we going to be making super column insertions? */
             try {
-              this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
+                this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
             } catch (NumberFormatException e) {
-              this.subKeyField = -1;
+                this.subKeyField = -1;
             }
             
             System.out.println("Using field ["+keyField+"] as row key");
@@ -100,7 +101,7 @@ public class CassandraColumnLoader extends Configured implements Tool {
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {
-              CassandraStorageClient.init();
+                CassandraStorageClient.init();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -112,7 +113,7 @@ public class CassandraColumnLoader extends Configured implements Tool {
         }
 
         public void close() {
-          CassandraStorageClient.close();
+            CassandraStorageClient.close();
         }
     }
 
@@ -145,11 +146,11 @@ public class CassandraColumnLoader extends Configured implements Tool {
         return 0;
     }
 
-   /*
-    *  Main class, simply shells out to generic tool runner for Hadoop. This
-    *  means you can pass command line script the usual options with '-D, -libjars'
-    *  for free.
-    */
+    /*
+     *  Main class, simply shells out to generic tool runner for Hadoop. This
+     *  means you can pass command line script the usual options with '-D, -libjars'
+     *  for free.
+     */
     public static void main(String[] args) throws Exception {
         int res = ToolRunner.run(new Configuration(), new CassandraColumnLoader(), args);
         System.exit(res);

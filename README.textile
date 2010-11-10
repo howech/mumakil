@@ -2,7 +2,7 @@ h1. Cassandra Bulk Loader
 
 This is minimum viable at the moment and here's why:
 
-* For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an 'address already in use' exception. Once I can figure out how to set the internal storage port from inside the map task this will be fixed.
+* For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an 'address already in use' exception.
 * SuperColumn support appears to not be working ?
 
 CassandraBulkLoader runs a storage client embedded inside each map task. As such, no data will remain on the node running the map task. Instead the storage client serializes your data in a binary form and sends it _directly_ to the node(s) that's going to own it. The server simply stores this data in its own binary memtable and does no work on it other than flushing it to disk when the memtable has reached @binary_memtable_throughput_in_mb@.
@@ -26,8 +26,7 @@ where @ks@ is obviously the keyspace and @cf@ is the column family.
 Now, just so you're happy and not confused and the world is a nice place, you're going to want to flush the keyspace you dumped into and possibly even restart the daemons.
 
 <pre><code>
-$CASSANDRA_HOME/bin/nodetool -h `hostnam -i` flush soc_net_tw 
+$CASSANDRA_HOME/bin/nodetool -h `hostname -i` flush soc_net_tw 
 </code></pre>
 
 Sometimes this it takes a long time for the data to be queryable. Don't worry, it does show up.
-Bye.
