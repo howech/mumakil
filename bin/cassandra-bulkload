@@ -51,7 +51,7 @@ class CassandraBulkLoader
       "#{options.nil_outfile}"
     ].flatten.compact.join(" \t\\\n  ")
     system %Q{ echo #{hadoop_cmd} }
-    # system %Q{ #{hadoop_cmd} }
+    system %Q{ #{hadoop_cmd} }
   end
 
   def remove_nil_outfile
