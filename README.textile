@@ -1,5 +1,9 @@
 h1. Cassandra Bulk Loader
 
+An updated bulk loader for Cassandra with a simple ruby runner. Modified from the bmt_example in Cassandra contrib.
+
+Warning: Unless you're planning on bulk loading a whole lot of data (ie. greater than a few GB) don't bother with this tool.
+
 This is minimum viable at the moment and here's why:
 
 * For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an 'address already in use' exception.
