@@ -72,7 +72,6 @@ public class CassandraColumnLoader extends Configured implements Tool {
                 /* Insert single row with many normal columns */
                 for(int i = 0; i < fields.length; i++) {
                     if (i != keyField) {
-                        System.out.println("Adding column to ["+cfName+"]with row_key:["+fields[keyField]+"] column_name:["+fields[i]+"] and column_value:[0]");
                         columnFamily.addColumn(new QueryPath(cfName, null, fields[i].getBytes("UTF-8")), "0".getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
                     }
                 }
