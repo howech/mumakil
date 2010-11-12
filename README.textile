@@ -2,35 +2,49 @@ h1. Cassandra Bulk Loader
 
 An updated bulk loader for Cassandra with a simple ruby runner. Modified from the bmt_example in Cassandra contrib.
 
-Warning: Unless you're planning on bulk loading a whole lot of data (ie. greater than a few GB) don't bother with this tool.
+**Warning**: Unless you're planning on bulk loading a whole lot of data (ie. greater than a few GB) don't bother with this tool.
 
 This is minimum viable at the moment and here's why:
 
-* For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an 'address already in use' exception.
-* SuperColumn support appears to not be working ?
+* For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an
+'address already in use' exception.
 
-CassandraBulkLoader runs a storage client embedded inside each map task. As such, no data will remain on the node running the map task. Instead the storage client serializes your data in a binary form and sends it _directly_ to the node(s) that's going to own it. The server simply stores this data in its own binary memtable and does no work on it other than flushing it to disk when the memtable has reached @binary_memtable_throughput_in_mb@.
+CassandraBulkLoader runs an internal node (storage client) embedded inside each map task. As such, no data will remain on the
+node running the map task. Instead the storage client serializes your data in a binary form and sends it _directly_ to the
+node(s) that's going to own it. The server simply stores this data in its own binary memtable and does no work on it other than
+flushing it to disk when the memtable has reached @binary_memtable_throughput_in_mb@.
 
 h2. Usage:
 
-Say you've got a dataset on the _hdfs_ called @/tmp/trstrank.tsv@. It looks like
+There are two use cases this tool addresses:
 
-1234   joe_bob     7     13
-
-and so on with column names (user_id, screen_name, trstrank, trust_quotient)
-
-then all you've got to do is:
+A. You've got a large tab separated file on the hdfs such as the output of Pig's default storage. For example, a 3 column dataset
+called foo_dataset.tsv with fields (user_id, screen_name, ip_address). Assuming you've already created your keyspace called
+FooKeyspace (which you can easily do with @bin/schemer.rb@) and column family FooColumnFamily simply run:
 
 <pre><code>
-  bin/cassandra-bulkload --ks=soc_net_tw --cf=Trstrank --key_field=1 --field_names=user_id,screen_name,trstrank,trust_quotient /tmp/trstrank.tsv
+  bin/cassandra-bulkload --table --ks=FooKeyspace --cf=FooColumnFamily --key_field=1 --col_names=user_id,screen_name,ip_address /hdfs/path/to/foo_dataset.tsv
 </code></pre>
 
-where @ks@ is obviously the keyspace and @cf@ is the column family.
+where @key_field@ is the zero based column number of the field you'd like to use as the row key. You can also specify the path to
+@cassandra.yaml@ with '--cassandra_config' as well as various other options. You can see what your options are using @bin/cassandra-bulkload --help@
 
-Now, just so you're happy and not confused and the world is a nice place, you're going to want to flush the keyspace you dumped into and possibly even restart the daemons.
+B. You've got a large tab separated file on the hdfs. In this case you'd like to use one of the fields as the row key, optionally another as the super column name,
+and all the others as sub column names. In this case all the column values are set to zero. For example, you've stored an adjacency list (user_a_id, user_b_id) as
+foo_network.tsv on the hdfs. To insert do:
 
 <pre><code>
-$CASSANDRA_HOME/bin/nodetool -h `hostname -i` flush soc_net_tw 
+  bin/cassandra-bulkload --columns --ks=Graph --cf=Users --key_field=0 /hdfs/path/to/foo_network.tsv
 </code></pre>
 
-Sometimes this it takes a long time for the data to be queryable. Don't worry, it does show up.
+where here we are inserting into a keyspace called @Graph@ and a column family called @Users@. We don't need to explicitly specify column names here since we're using
+a field in the dataset itself.
+
+h2. Caveats/Notes
+
+* Both CASSANDRA_HOME and HADOOP_HOME should be set as environment variables
+* cassandra.yaml needs to exist on ALL your hadoop nodes in the same place and setup properly with seeds
+* Keyspace metadata, specifically the @system@ keyspace, needs to exist in your @data_file_directories@ and be up to data. This may require starting a regular cassandra node on your hadoop machine, populating the data dirs with keyspace metadata, then killing the node.
+* Set max.map.tasks in your hadoop config to only run one map task per hadoop node
+* You'll need to flush you keyspaces after doing this kind of insert: @$CASSANDRA_HOME/bin/nodetool -h `hostname -i` flush FooKeyspace@
+* Multiple inserts for the same row key will result in only one of the inserts showing up, get around this by rearranging your data with a preprocessing step

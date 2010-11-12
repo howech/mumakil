@@ -6,18 +6,20 @@ require 'configliere' ; Configliere.use(:commandline, :env_var, :define)
 require 'json'
 
 #
-# Make a yaml file on disk that looks like the keyspace you want. Do it.
+# Make a yaml file on disk that looks like the keyspace you want. Take a look at the example.
 #
-# ./schemer.rb mykeyspace.yaml
+# bin/schemer.rb --host=`hostname -i` --port=9160 mykeyspace.yaml
 #
 
+Settings.define :host, :default => 'localhost', :description => 'Host running cassandra thrift daemon'
+Settings.define :port, :default => '9160',      :description => 'Port to interface with cassandra over'
 Settings.define :cassandra_home, :env_var => 'CASSANDRA_HOME', :default => '/home/jacob/Programming/cassandra', :description => 'Path to cassandra installation'
+
 Settings.resolve!
 options = Settings.dup
 
 Dir[
-  "#{options.cassandra_home}/build/*cassandra*.jar",
-  "#{options.cassandra_home}/build/dist/lib/*.jar"
+  "#{options.cassandra_home}/lib/*.jar",
 ].each{|jar| require jar}
 
 java_import 'org.apache.thrift.TException'
@@ -153,5 +155,5 @@ class CliClient
 
 end
 
-cli = CliClient.new('192.168.1.119', 9160)
+cli = CliClient.new(options.host, options.port)
 cli.create_keyspace_from_yaml options.rest.first
