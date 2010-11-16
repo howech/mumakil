@@ -15,11 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.cassandra.db;
 
 import java.io.IOException;
 import java.util.List;
 
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -89,10 +91,12 @@ public class MemtableMessenger {
             System.arraycopy(bufOut.getData(), 0, data, 0, bufOut.getLength());
             column = new Column(FBUtilities.toByteArray(cf.id()), data, new TimestampClock(0));
             baseColumnFamily.addColumn(column);
+            System.out.println("Base cf type"+baseColumnFamily.getColumnFamilyType());
+            System.out.println("Base cf: ["+baseColumnFamily.toString()+"]");
         }
         rm = new RowMutation(Keyspace, Key);
         rm.add(baseColumnFamily);
-    
+        
         try { /* Make message */
             message = rm.makeRowMutationMessage(StorageService.Verb.BINARY);
         }

@@ -77,7 +77,7 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
             columnFamily = ColumnFamily.create(keyspace, cfName);
             while (values.hasNext()) {
                 String fields[] = values.next().toString().split("\t");
-                Long ts         = System.currentTimeMillis();                    
+                int ts          = 0;                    
                 if (subKeyField == -1) {              
                     /* Regular insertion */
                     String columnName  = fields[0];
@@ -101,7 +101,6 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
             }
             List<IAsyncResult> results = new ArrayList<IAsyncResult>();
             for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, key.getBytes())) {
-                System.out.println("Sending ["+key.toString()+"] to endpoint ["+endpoint+"]");
                 results.add(MessagingService.instance.sendRR(message, endpoint));
             }
             

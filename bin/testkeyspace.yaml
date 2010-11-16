@@ -1,11 +1,8 @@
 ---
-name: MyKeyspace
+name: test_keyspace
 replica_placement_strategy: org.apache.cassandra.locator.SimpleStrategy
 replication_factor: 1
 column_families:
-  - name: MyColumnFamily1
-    compare_with: BytesType
-    column_type: Super
-      
-  - name: MyColumnFamily2
+  - name: test_super_col
     compare_with: UTF8Type
+    column_type: Super
