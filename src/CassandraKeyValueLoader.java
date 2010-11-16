@@ -48,71 +48,65 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 
 /*
+  
+  Loads data of the form (row_key, column_name, column_value) OR (row_key, super_column_name, column_name, solumn_value).
+  This will launch a reduce task to accumulate all values for a given row key.
+   
+*/
+public class CassandraKeyValueLoader extends Configured implements Tool {
+    public static class Map extends MapReduceBase implements Mapper<Text, Text, Text, Text> {
+        public void map(Text key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
+            output.collect(key, value);
+        }
+    }
 
-  First of all we expect a comma separated list of field names to be passed in via '-Dcassandra.col_names=...'. With this
-  we read in lines from the hdfs path expecting that each record adheres to this schema. This record is inserted directly
-  into cassandra, no thrift.
+    public static class Reduce extends MapReduceBase implements Reducer<Text, Text, Text, Text> {
 
- */
-public class CassandraTableLoader extends Configured implements Tool {
-    public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
-        
         private JobConf jobconf;
         private ColumnFamily columnFamily;
         private String keyspace;
         private String cfName;
         private Integer keyField;
         private Integer subKeyField;
-        private Integer tsField;
-        private String[] fieldNames;
 
-        public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
-
-            /* Split the line into fields */
-            String[] fields = value.toString().split("\t");
             
-            /* Handle custom timestamp for all columns */
-            Long timeStamp;
-            if (tsField == -1) {
-                timeStamp = System.currentTimeMillis();
-            } else {
-                timeStamp = Long.parseLong(fields[tsField]);
-            }
-
+        public void reduce(Text key, Iterator<Text> values, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
+            
             /* Create linked list of column families, this will hold only one column family */            
             List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
             columnFamily = ColumnFamily.create(keyspace, cfName);
-            
-            /* Is this a super column insertion? */
-            if (subKeyField == -1) {
-              
-              /* Insert single row with many normal columns */
-              for(int i = 0; i < fields.length; i++) {
-                if (i < fieldNames.length && i != keyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+            while (values.hasNext()) {
+                String fields[] = values.next().toString().split("\t");
+                Long ts         = System.currentTimeMillis();                    
+                if (subKeyField == -1) {              
+                    /* Regular insertion */
+                    String columnName  = fields[0];
+                    String columnValue = fields[1];
+                    columnFamily.addColumn(new QueryPath(cfName, null, columnName.getBytes("UTF-8")), columnValue.getBytes("UTF-8"), new TimestampClock(ts));
+                } else {
+                    String superColName = fields[0]; // ie. fields[1]
+                    String columnName   = fields[1];
+                    String columnValue  = fields[2];
+                    columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), columnName.getBytes("UTF-8")), columnValue.getBytes(), new TimestampClock(ts));
                 }
-              }
-              
-            } else {
-              /* FIXME: you'll get an array index error if you don't have a column value. You should always have one, but ...*/
-              String superColName = fields[subKeyField];
-              for(int i = 0; i < fields.length; i++) {
-                if (i != keyField && i != subKeyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
-                }
-              }
-
             }
             columnFamilyList.add(columnFamily);
             
             /* Serialize our data as a binary message and send it out to Cassandra endpoints */
-            Message message = MemtableMessenger.createMessage(keyspace, fields[keyField].getBytes("UTF-8"), cfName, columnFamilyList);
-            List<IAsyncResult> results = new ArrayList<IAsyncResult>();
-            for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, fields[keyField].getBytes())) {
-              results.add(MessagingService.instance.sendRR(message, endpoint));
+            Message message;
+            if (subKeyField == -1) {
+                message = MemtableMessenger.createMessage(keyspace, key.getBytes(), cfName, columnFamilyList);
+            } else {
+                message = MemtableMessenger.createSuperMessage(keyspace, key.getBytes(), cfName, columnFamilyList);
             }
+            List<IAsyncResult> results = new ArrayList<IAsyncResult>();
+            for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, key.getBytes())) {
+                System.out.println("Sending ["+key.toString()+"] to endpoint ["+endpoint+"]");
+                results.add(MessagingService.instance.sendRR(message, endpoint));
+            }
+            
         }
-
+        
         /*
          *  Called at very beginning of map task, sets up basic configuration at the task level
          */
@@ -121,21 +115,13 @@ public class CassandraTableLoader extends Configured implements Tool {
             this.jobconf      = job;
             this.keyspace     = job.get("cassandra.keyspace");
             this.cfName       = job.get("cassandra.column_family");
-            this.fieldNames   = job.get("cassandra.col_names").split(",");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
-
-            /* Deal with custom timestamp field */
-            try {
-                this.tsField = Integer.parseInt(job.get("cassandra.timestamp_field"));
-            } catch (NumberFormatException e) {
-                this.tsField = -1;
-            }
 
             /* Are we going to be making super column insertions? */
             try {
-              this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
+                this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
             } catch (NumberFormatException e) {
-              this.subKeyField = -1;
+                this.subKeyField = -1;
             }
             
             System.out.println("Using field ["+keyField+"] as row key");
@@ -144,7 +130,7 @@ public class CassandraTableLoader extends Configured implements Tool {
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {
-              CassandraStorageClient.init();
+                CassandraStorageClient.init();
                 // init_cassandra();
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -155,9 +141,9 @@ public class CassandraTableLoader extends Configured implements Tool {
                 throw new RuntimeException(e);
             }
         }
-
+        
         public void close() {
-          CassandraStorageClient.close();
+            CassandraStorageClient.close();
         }
     }
 
@@ -168,9 +154,10 @@ public class CassandraTableLoader extends Configured implements Tool {
         JobConf conf                = new JobConf(getConf(), CassandraTableLoader.class);
         GenericOptionsParser parser = new GenericOptionsParser(conf,args);
 
-        conf.setJobName("CassandraTableLoader");
+        conf.setInputFormat(KeyValueTextInputFormat.class);
+        conf.setJobName("CassandraKeyValueLoader");
         conf.setMapperClass(Map.class);
-        conf.setNumReduceTasks(0);
+        conf.setReducerClass(Reduce.class);
         conf.setOutputKeyClass(Text.class);
         conf.setOutputValueClass(Text.class);
 
@@ -190,13 +177,13 @@ public class CassandraTableLoader extends Configured implements Tool {
         return 0;
     }
 
-   /*
-    *  Main class, simply shells out to generic tool runner for Hadoop. This
-    *  means you can pass command line script the usual options with '-D, -libjars'
-    *  for free.
-    */
+    /*
+     *  Main class, simply shells out to generic tool runner for Hadoop. This
+     *  means you can pass command line script the usual options with '-D, -libjars'
+     *  for free.
+     */
     public static void main(String[] args) throws Exception {
-        int res = ToolRunner.run(new Configuration(), new CassandraTableLoader(), args);
+        int res = ToolRunner.run(new Configuration(), new CassandraKeyValueLoader(), args);
         System.exit(res);
     }
 }
