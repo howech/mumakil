@@ -48,11 +48,13 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 
 /*
-  
-  Loads data of the form (row_key, column_name, column_value) OR (row_key, super_column_name, column_name, solumn_value).
-  This will launch a reduce task to accumulate all values for a given row key.
+
+  Launches both a map AND a reduce. Here the reducer accumulates all columns for a given row
+  key and inserts them at once. In the Hadoop options set mapred.max.reduce.tasks=1 so only
+  one reduce task is launched per machine at a time.
    
 */
+
 public class CassandraKeyValueLoader extends Configured implements Tool {
     public static class Map extends MapReduceBase implements Mapper<Text, Text, Text, Text> {
         public void map(Text key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
@@ -67,38 +69,21 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
         private String keyspace;
         private String cfName;
         private Integer keyField;
-        private Integer subKeyField;
-
-            
+        
         public void reduce(Text key, Iterator<Text> values, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
             
             /* Create linked list of column families, this will hold only one column family */            
             List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
             columnFamily = ColumnFamily.create(keyspace, cfName);
+
             while (values.hasNext()) {
-                String fields[] = values.next().toString().split("\t");
-                int ts          = 0;                    
-                if (subKeyField == -1) {              
-                    /* Regular insertion */
-                    String columnName  = fields[0];
-                    String columnValue = fields[1];
-                    columnFamily.addColumn(new QueryPath(cfName, null, columnName.getBytes("UTF-8")), columnValue.getBytes("UTF-8"), new TimestampClock(ts));
-                } else {
-                    String superColName = fields[0]; // ie. fields[1]
-                    String columnName   = fields[1];
-                    String columnValue  = fields[2];
-                    columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), columnName.getBytes("UTF-8")), columnValue.getBytes(), new TimestampClock(ts));
-                }
+                String fields[]    = values.next().toString().split("\t");
+                columnFamily.addColumn(new QueryPath(cfName, null, fields[0].getBytes("UTF-8")), fields[1].getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
             }
             columnFamilyList.add(columnFamily);
-            
+
             /* Serialize our data as a binary message and send it out to Cassandra endpoints */
-            Message message;
-            if (subKeyField == -1) {
-                message = MemtableMessenger.createMessage(keyspace, key.getBytes(), cfName, columnFamilyList);
-            } else {
-                message = MemtableMessenger.createSuperMessage(keyspace, key.getBytes(), cfName, columnFamilyList);
-            }
+            Message message = MemtableMessenger.createMessage(keyspace, key.getBytes(), cfName, columnFamilyList);
             List<IAsyncResult> results = new ArrayList<IAsyncResult>();
             for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, key.getBytes())) {
                 results.add(MessagingService.instance.sendRR(message, endpoint));
@@ -116,21 +101,10 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
             this.cfName       = job.get("cassandra.column_family");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
 
-            /* Are we going to be making super column insertions? */
-            try {
-                this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
-            } catch (NumberFormatException e) {
-                this.subKeyField = -1;
-            }
-            
-            System.out.println("Using field ["+keyField+"] as row key");
-            System.out.println("Using field ["+subKeyField+"] as sub row key");
-            /* Set cassandra config file (cassandra.yaml) */
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {
                 CassandraStorageClient.init();
-                // init_cassandra();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

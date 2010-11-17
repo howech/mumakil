@@ -62,13 +62,11 @@ public class CassandraTableLoader extends Configured implements Tool {
         private String keyspace;
         private String cfName;
         private Integer keyField;
-        private Integer subKeyField;
         private Integer tsField;
         private String[] fieldNames;
 
         public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 
-            /* Split the line into fields */
             String[] fields = value.toString().split("\t");
             
             /* Handle custom timestamp for all columns */
@@ -83,25 +81,10 @@ public class CassandraTableLoader extends Configured implements Tool {
             List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
             columnFamily = ColumnFamily.create(keyspace, cfName);
             
-            /* Is this a super column insertion? */
-            if (subKeyField == -1) {
-              
-              /* Insert single row with many normal columns */
-              for(int i = 0; i < fields.length; i++) {
+            for(int i = 0; i < fields.length; i++) {
                 if (i < fieldNames.length && i != keyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+                    columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
                 }
-              }
-              
-            } else {
-              /* FIXME: you'll get an array index error if you don't have a column value. You should always have one, but ...*/
-              String superColName = fields[subKeyField];
-              for(int i = 0; i < fields.length; i++) {
-                if (i != keyField && i != subKeyField) {
-                  columnFamily.addColumn(new QueryPath(cfName, superColName.getBytes("UTF-8"), fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
-                }
-              }
-
             }
             columnFamilyList.add(columnFamily);
             
@@ -131,16 +114,6 @@ public class CassandraTableLoader extends Configured implements Tool {
                 this.tsField = -1;
             }
 
-            /* Are we going to be making super column insertions? */
-            try {
-              this.subKeyField = Integer.parseInt(job.get("cassandra.sub_key_field"));
-            } catch (NumberFormatException e) {
-              this.subKeyField = -1;
-            }
-            
-            System.out.println("Using field ["+keyField+"] as row key");
-            System.out.println("Using field ["+subKeyField+"] as sub row key");
-            /* Set cassandra config file (cassandra.yaml) */
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {

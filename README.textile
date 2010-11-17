@@ -7,6 +7,7 @@ An updated bulk loader for Cassandra with a simple ruby runner. Modified from th
 This is minimum viable at the moment and here's why:
 
 * For internal cassandra reasons only one map task should be launched per hadoop node. More than that will simply fail with an 'address already in use' exception.
+* Super columns are not supported at the moment.
 
 CassandraBulkLoader runs an internal node (storage client) embedded inside each map task. As such, no data will remain on the node running the map task. Instead the storage client serializes your data in a binary form and sends it _directly_ to the node(s) that's going to own it. The server simply stores this data in its own binary memtable and does no work on it other than flushing it to disk when the memtable has reached @binary_memtable_throughput_in_mb@.
 
