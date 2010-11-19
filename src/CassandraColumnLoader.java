@@ -17,6 +17,8 @@
  */
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.lang.NumberFormatException;
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.mapred.TaskID;
 
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.net.IAsyncResult;
@@ -56,6 +59,7 @@ public class CassandraColumnLoader extends Configured implements Tool {
         private String cfName;
         private Integer keyField;
         private String fillValue;
+        private CFMetaData cfMetaData;
         
         public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 
@@ -90,11 +94,12 @@ public class CassandraColumnLoader extends Configured implements Tool {
             this.cfName       = job.get("cassandra.column_family");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
             this.fillValue    = job.get("cassandra.fill_value");
-
+            
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {
                 CassandraStorageClient.init();
+                this.cfMetaData   = DatabaseDescriptor.getCFMetaData(keyspace, cfName);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

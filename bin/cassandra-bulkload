@@ -45,6 +45,7 @@ Settings.define :keyvalue,         :default => false,                           
 # Hadoop options
 Settings.define :min_split_size,   :default => "100000",                            :description => "Hadoop min split size"
 Settings.define :reduce_tasks,     :default => "0",                                 :description => "Number of reduce tasks when using keyvalue type insertion"
+Settings.define :map_tasks,                                                         :description => "Suggestion of the number of map tasks per job"
 Settings.define :hadoop_home,      :default => "/usr/lib/hadoop",                   :description => "Path to hadoop installation", :env_var => "HADOOP_HOME"
 
 Settings.resolve!
@@ -66,6 +67,7 @@ class CassandraBulkLoader
       "#{options.hadoop_home}/bin/hadoop jar #{run_jar}",
       mainclass,
       reduce_tasks,
+      map_tasks,
       "-Dcassandra.config=file://#{options.cassandra_config}",
       "-Dcassandra.keyspace=#{options.ks}",
       "-Dcassandra.column_family=#{options.cf}",
@@ -115,6 +117,12 @@ class CassandraBulkLoader
     return unless options.reduce_tasks
     "-Dmapred.reduce.tasks=#{options.reduce_tasks}"
   end
+
+  def map_tasks
+    return unless options.map_tasks
+    "-Dmapred.map.tasks=#{options.map_tasks}"
+  end
+
 
   def mainclass
     return "CassandraTableLoader"    if options.table
