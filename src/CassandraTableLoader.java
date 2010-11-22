@@ -1,175 +1,127 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import java.io.IOException;
-import java.lang.NumberFormatException;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-import java.util.LinkedList;
-import java.util.List;
-import java.net.InetAddress;
-import java.net.BindException;
-import java.net.ServerSocket;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.nio.ByteBuffer;
+import java.util.*;
 
+import org.apache.cassandra.avro.Column;
+import org.apache.cassandra.avro.ColumnOrSuperColumn;
+import org.apache.cassandra.avro.Mutation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.thrift.SlicePredicate;
+import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat;
+import org.apache.cassandra.hadoop.ConfigHelper;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.conf.*;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.util.*;
-import org.apache.hadoop.mapred.*;
-import org.apache.hadoop.mapred.TaskID;
-
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.filter.QueryPath;
-import org.apache.cassandra.net.IAsyncResult;
-import org.apache.cassandra.net.Message;
-import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.FBUtilities;
 
 /*
-
-  First of all we expect a comma separated list of field names to be passed in via '-Dcassandra.col_names=...'. With this
-  we read in lines from the hdfs path expecting that each record adheres to this schema. This record is inserted directly
-  into cassandra, no thrift.
-
+  
+  Dumps out select columns from every row in a column family as a tsv file to hdfs.
+  
  */
 public class CassandraTableLoader extends Configured implements Tool {
-    public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
+    
+    public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<Mutation>> {
         
-        private JobConf jobconf;
-        private ColumnFamily columnFamily;
-        private String keyspace;
-        private String cfName;
+        private List<Mutation> wholeRow = new ArrayList<Mutation>();
         private Integer keyField;
         private Integer tsField;
         private String[] fieldNames;
-
-        public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
-
+        
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] fields = value.toString().split("\t");
-            
-            /* Handle custom timestamp for all columns */
+
             Long timeStamp;
             if (tsField == -1) {
-                timeStamp = System.currentTimeMillis();
+                timeStamp = System.currentTimeMillis() * 1000;
             } else {
                 timeStamp = Long.parseLong(fields[tsField]);
             }
-
-            /* Create linked list of column families, this will hold only one column family */            
-            List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
-            columnFamily = ColumnFamily.create(keyspace, cfName);
             
             for(int i = 0; i < fields.length; i++) {
                 if (i < fieldNames.length && i != keyField) {
-                    columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+                    wholeRow.add(getMutation(fieldNames[i], fields[i], timeStamp));
                 }
             }
-            columnFamilyList.add(columnFamily);
-            
-            /* Serialize our data as a binary message and send it out to Cassandra endpoints */
-            Message message = MemtableMessenger.createMessage(keyspace, fields[keyField].getBytes("UTF-8"), cfName, columnFamilyList);
-            List<IAsyncResult> results = new ArrayList<IAsyncResult>();
-            for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, fields[keyField].getBytes())) {
-              results.add(MessagingService.instance.sendRR(message, endpoint));
-            }
+            context.write(ByteBuffer.wrap(fields[keyField].getBytes()), wholeRow);
+            wholeRow.clear();
         }
 
-        /*
-         *  Called at very beginning of map task, sets up basic configuration at the task level
-         */
-        public void configure(JobConf job) {
+        private static Mutation getMutation(String name, String value, Long timeStamp) {
+            Mutation m = new Mutation();
+            m.column_or_supercolumn = getCoSC(name, value, timeStamp);
+            return m;
+        }
+
+        private static ColumnOrSuperColumn getCoSC(String name, String value, Long timeStamp) {
+            ByteBuffer columnName  = ByteBuffer.wrap(name.getBytes());
+            ByteBuffer columnValue = ByteBuffer.wrap(value.getBytes());
+
+            Column c    = new Column();
+            c.name      = columnName;
+            c.value     = columnValue;
+            c.timestamp = timeStamp;
+            c.ttl       = 0;
+            ColumnOrSuperColumn cosc = new ColumnOrSuperColumn();
+            cosc.column = c;
+            return cosc;
+        }
+
+        protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {
+            Configuration conf = context.getConfiguration();
             
-            this.jobconf      = job;
-            this.keyspace     = job.get("cassandra.keyspace");
-            this.cfName       = job.get("cassandra.column_family");
-            this.fieldNames   = job.get("cassandra.col_names").split(",");
-            this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
+            this.fieldNames   = conf.get("cassandra.col_names").split(",");
+            this.keyField     = Integer.parseInt(conf.get("cassandra.row_key_field"));
 
             /* Deal with custom timestamp field */
             try {
-                this.tsField = Integer.parseInt(job.get("cassandra.timestamp_field"));
+                this.tsField = Integer.parseInt(conf.get("cassandra.timestamp_field"));
             } catch (NumberFormatException e) {
                 this.tsField = -1;
             }
-
-            System.setProperty("cassandra.config", job.get("cassandra.config"));
-            
-            try {
-              CassandraStorageClient.init();
-                // init_cassandra();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            try {
-                Thread.sleep(10*1000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        public void close() {
-          CassandraStorageClient.close();
         }
     }
+    
+    public int run(String[] args) throws Exception {
+        Job job                    = new Job(getConf()); 
+        job.setJarByClass(CassandraTableLoader.class);
+        job.setJobName("CassandraTableLoader");
+        job.setMapperClass(ColumnFamilyMapper.class);
+        job.setNumReduceTasks(0);
 
-    /*
-     *  Interprets commandline args, sets configuration, and actually runs the job
-     */
-    public int run(String[] args) {
-        JobConf conf                = new JobConf(getConf(), CassandraTableLoader.class);
-        GenericOptionsParser parser = new GenericOptionsParser(conf,args);
+        job.setOutputKeyClass(ByteBuffer.class);
+        job.setOutputValueClass(List.class);
+        job.setOutputFormatClass(ColumnFamilyOutputFormat.class);
 
-        conf.setJobName("CassandraTableLoader");
-        conf.setMapperClass(Map.class);
-        conf.setNumReduceTasks(0);
-        conf.setOutputKeyClass(Text.class);
-        conf.setOutputValueClass(Text.class);
-
+        Configuration conf = job.getConfiguration();
+        ConfigHelper.setRpcPort(conf, conf.get("cassandra.thrift_port"));
+        ConfigHelper.setInitialAddress(conf, conf.get("cassandra.initial_host"));
+        ConfigHelper.setOutputColumnFamily(conf, conf.get("cassandra.keyspace"), conf.get("cassandra.column_family"));
+        ConfigHelper.setPartitioner(conf, "org.apache.cassandra.dht.RandomPartitioner");
+        // Handle input path
         List<String> other_args = new ArrayList<String>();
         for (int i=0; i < args.length; ++i) {
             other_args.add(args[i]);
         }
-	
-        FileInputFormat.setInputPaths(conf, new Path(other_args.get(0)));
-        FileOutputFormat.setOutputPath(conf, new Path(other_args.get(1)));
-        try {
-            JobClient.runJob(conf);
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        FileInputFormat.setInputPaths(job, new Path(other_args.get(0)));
+
+        // Submit job to server and wait for completion
+        job.waitForCompletion(true);
         return 0;
     }
 
-   /*
-    *  Main class, simply shells out to generic tool runner for Hadoop. This
-    *  means you can pass command line script the usual options with '-D, -libjars'
-    *  for free.
-    */
     public static void main(String[] args) throws Exception {
-        int res = ToolRunner.run(new Configuration(), new CassandraTableLoader(), args);
-        System.exit(res);
+        ToolRunner.run(new Configuration(), new CassandraTableLoader(), args);
+        System.exit(0);
     }
 }

@@ -49,48 +49,53 @@ import org.apache.cassandra.utils.FBUtilities;
 
 /*
 
-  Launches both a map AND a reduce. Here the reducer accumulates all columns for a given row
-  key and inserts them at once. In the Hadoop options set mapred.max.reduce.tasks=1 so only
-  one reduce task is launched per machine at a time.
-   
-*/
+  First of all we expect a comma separated list of field names to be passed in via '-Dcassandra.col_names=...'. With this
+  we read in lines from the hdfs path expecting that each record adheres to this schema. This record is inserted directly
+  into cassandra, no thrift.
 
-public class CassandraKeyValueLoader extends Configured implements Tool {
-    public static class Map extends MapReduceBase implements Mapper<Text, Text, Text, Text> {
-        public void map(Text key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
-            output.collect(key, value);
-        }
-    }
-
-    public static class Reduce extends MapReduceBase implements Reducer<Text, Text, Text, Text> {
-
+ */
+public class BMTTableLoader extends Configured implements Tool {
+    public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
+        
         private JobConf jobconf;
         private ColumnFamily columnFamily;
         private String keyspace;
         private String cfName;
         private Integer keyField;
-        
-        public void reduce(Text key, Iterator<Text> values, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
+        private Integer tsField;
+        private String[] fieldNames;
+
+        public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
+
+            String[] fields = value.toString().split("\t");
             
+            /* Handle custom timestamp for all columns */
+            Long timeStamp;
+            if (tsField == -1) {
+                timeStamp = System.currentTimeMillis();
+            } else {
+                timeStamp = Long.parseLong(fields[tsField]);
+            }
+
             /* Create linked list of column families, this will hold only one column family */            
             List<ColumnFamily> columnFamilyList = new LinkedList<ColumnFamily>();
             columnFamily = ColumnFamily.create(keyspace, cfName);
-
-            while (values.hasNext()) {
-                String fields[]    = values.next().toString().split("\t");
-                columnFamily.addColumn(new QueryPath(cfName, null, fields[0].getBytes("UTF-8")), fields[1].getBytes("UTF-8"), new TimestampClock(System.currentTimeMillis()));
+            
+            for(int i = 0; i < fields.length; i++) {
+                if (i < fieldNames.length && i != keyField) {
+                    columnFamily.addColumn(new QueryPath(cfName, null, fieldNames[i].getBytes("UTF-8")), fields[i].getBytes("UTF-8"), new TimestampClock(timeStamp));
+                }
             }
             columnFamilyList.add(columnFamily);
-
-            /* Serialize our data as a binary message and send it out to Cassandra endpoints */
-            Message message = MemtableMessenger.createMessage(keyspace, key.getBytes(), cfName, columnFamilyList);
-            List<IAsyncResult> results = new ArrayList<IAsyncResult>();
-            for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, key.getBytes())) {
-                results.add(MessagingService.instance.sendRR(message, endpoint));
-            }
             
+            /* Serialize our data as a binary message and send it out to Cassandra endpoints */
+            Message message = MemtableMessenger.createMessage(keyspace, fields[keyField].getBytes("UTF-8"), cfName, columnFamilyList);
+            List<IAsyncResult> results = new ArrayList<IAsyncResult>();
+            for (InetAddress endpoint: StorageService.instance.getNaturalEndpoints(keyspace, fields[keyField].getBytes())) {
+              results.add(MessagingService.instance.sendRR(message, endpoint));
+            }
         }
-        
+
         /*
          *  Called at very beginning of map task, sets up basic configuration at the task level
          */
@@ -99,12 +104,21 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
             this.jobconf      = job;
             this.keyspace     = job.get("cassandra.keyspace");
             this.cfName       = job.get("cassandra.column_family");
+            this.fieldNames   = job.get("cassandra.col_names").split(",");
             this.keyField     = Integer.parseInt(job.get("cassandra.row_key_field"));
+
+            /* Deal with custom timestamp field */
+            try {
+                this.tsField = Integer.parseInt(job.get("cassandra.timestamp_field"));
+            } catch (NumberFormatException e) {
+                this.tsField = -1;
+            }
 
             System.setProperty("cassandra.config", job.get("cassandra.config"));
             
             try {
-                CassandraStorageClient.init();
+              CassandraStorageClient.init();
+                // init_cassandra();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -114,9 +128,9 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
                 throw new RuntimeException(e);
             }
         }
-        
+
         public void close() {
-            CassandraStorageClient.close();
+          CassandraStorageClient.close();
         }
     }
 
@@ -124,13 +138,12 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
      *  Interprets commandline args, sets configuration, and actually runs the job
      */
     public int run(String[] args) {
-        JobConf conf                = new JobConf(getConf(), CassandraTableLoader.class);
+        JobConf conf                = new JobConf(getConf(), BMTTableLoader.class);
         GenericOptionsParser parser = new GenericOptionsParser(conf,args);
 
-        conf.setInputFormat(KeyValueTextInputFormat.class);
-        conf.setJobName("CassandraKeyValueLoader");
+        conf.setJobName("BMTTableLoader");
         conf.setMapperClass(Map.class);
-        conf.setReducerClass(Reduce.class);
+        conf.setNumReduceTasks(0);
         conf.setOutputKeyClass(Text.class);
         conf.setOutputValueClass(Text.class);
 
@@ -150,13 +163,13 @@ public class CassandraKeyValueLoader extends Configured implements Tool {
         return 0;
     }
 
-    /*
-     *  Main class, simply shells out to generic tool runner for Hadoop. This
-     *  means you can pass command line script the usual options with '-D, -libjars'
-     *  for free.
-     */
+   /*
+    *  Main class, simply shells out to generic tool runner for Hadoop. This
+    *  means you can pass command line script the usual options with '-D, -libjars'
+    *  for free.
+    */
     public static void main(String[] args) throws Exception {
-        int res = ToolRunner.run(new Configuration(), new CassandraKeyValueLoader(), args);
+        int res = ToolRunner.run(new Configuration(), new BMTTableLoader(), args);
         System.exit(res);
     }
 }

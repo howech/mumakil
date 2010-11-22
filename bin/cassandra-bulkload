@@ -37,21 +37,25 @@ Settings.define :cassandra_home,   :default => "/usr/local/share/cassandra",    
 Settings.define :nil_outfile,      :default => "/tmp/cassandra_bulkloader/nil.out",  :description => "Hdfs path where nothing is actually written."
 Settings.define :col_names,        :default => "rsrc,tweet_id,created_at,user_id,screen_name,search_id,in_reply_to_user_id,in_reply_to_screen_name,in_reply_to_search_id,in_reply_to_status_id,text,source,lang,lat,lng,retweeted_count,rt_of_user_id,rt_of_screen_name,rt_of_tweet_id,contributors", :description => "Comma separated list of column names"
 
+Settings.define :host,             :default => "192.168.1.119",                 :description => "Initial cassandra host to connect to"
+Settings.define :port,             :default => "9160",                          :description => "Port on host to send thrift rpc to"
+
 # Insertion types
-Settings.define :table,            :default => false,                               :description => "Insert a flat, tab-separated-values, table"
-Settings.define :columns,          :default => false,                               :description => "Insert a flat, tab-separated-values, table but with the fields themselves as column names. 'fill_value' is used for all column values"
-Settings.define :keyvalue,         :default => false,                               :description => "Insert a tab-separated-values file, with exactly 3 fields per record (row_key, column_name, column_value). Launches a reduce."
+Settings.define :bmt_table_insert,    :default => false,                               :description => "Uses the bmt interface. Insert a flat, tab-separated-values, table. Use with caution"
+Settings.define :bmt_columns_insert,  :default => false,                               :description => "Uses the bmt interface. Insert a flat, tab-separated-values, table but with the fields themselves as column names. 'fill_value' is used for all column values"
+Settings.define :bmt_keyvalue_insert, :default => false,                               :description => "Uses the bmt interface. Insert a tab-separated-values file, with exactly 3 fields per record (row_key, column_name, column_value). Launches a reduce."
+Settings.define :table,               :default => false,                               :description => "Uses thrift to insert a flat tab-separated-values table"
+Settings.define :columns,             :default => false,                               :description => "Uses thrift to insert a flat tab-separated-values table with the column names coming from the fields themselves. 'fill_value' is used for all column values"
+Settings.define :keyvalue,            :default => false,                               :description => "Uses thrift to insert a flat tab-separated-values table with exactly three fields"
 
 # Hadoop options
 Settings.define :min_split_size,   :default => "100000",                            :description => "Hadoop min split size"
 Settings.define :reduce_tasks,     :default => "0",                                 :description => "Number of reduce tasks when using keyvalue type insertion"
 Settings.define :map_tasks,                                                         :description => "Suggestion of the number of map tasks per job"
 Settings.define :hadoop_home,      :default => "/usr/lib/hadoop",                   :description => "Path to hadoop installation", :env_var => "HADOOP_HOME"
-
 Settings.resolve!
 
 raise "No input file specified." if Settings.rest.first.blank?
-raise "You must pick either columns, table, or key value type loading" if (!Settings.table && !Settings.columns && !Settings.keyvalue)
 
 class CassandraBulkLoader
   attr_accessor :options
@@ -74,6 +78,8 @@ class CassandraBulkLoader
       "-Dcassandra.row_key_field=#{options.key_field}",
       "-Dcassandra.col_names=#{options.col_names}",
       "-Dcassandra.fill_value=#{options.fill_value}",
+      "-Dcassandra.thrift_port=#{options.port}",
+      "-Dcassandra.initial_host=#{options.host}",
       timestamp,
       "-Dmapred.min.split.size=#{options.min_split_size}",
       "-libjars #{libjars}",
@@ -81,7 +87,7 @@ class CassandraBulkLoader
       "#{options.nil_outfile}"
     ].flatten.compact.join(" \t\\\n  ")
     system %Q{ echo #{hadoop_cmd} }
-    system %Q{ #{hadoop_cmd} }
+    # system %Q{ #{hadoop_cmd} }
   end
 
   def remove_nil_outfile
@@ -91,7 +97,8 @@ class CassandraBulkLoader
   def hadoop_classpath
     hdp_cp = []
     Dir[
-      "#{options.cassandra_home}/lib/*cassandra*.jar"
+      "#{options.cassandra_home}/lib/*cassandra*.jar",
+      "#{options.cassandra_home}/lib/*thrift*.jar"
     ].each{|jar| hdp_cp << jar}
     hdp_cp.join(':')
   end
@@ -128,6 +135,9 @@ class CassandraBulkLoader
     return "CassandraTableLoader"    if options.table
     return "CassandraColumnLoader"   if options.columns
     return "CassandraKeyValueLoader" if options.keyvalue
+    return "BMTTableLoader"          if options.bmt_table_insert
+    return "BMTColumnLoader"         if options.bmt_columns_insert
+    return "BMTKeyValueLoader"       if options.bmt_keyvalue_insert
   end
 
 end

@@ -50,7 +50,7 @@ import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 
-public class CassandraColumnLoader extends Configured implements Tool {
+public class BMTColumnLoader extends Configured implements Tool {
     public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
         
         private JobConf jobconf;
@@ -119,10 +119,10 @@ public class CassandraColumnLoader extends Configured implements Tool {
      *  Interprets commandline args, sets configuration, and actually runs the job
      */
     public int run(String[] args) {
-        JobConf conf                = new JobConf(getConf(), CassandraColumnLoader.class);
+        JobConf conf                = new JobConf(getConf(), BMTColumnLoader.class);
         GenericOptionsParser parser = new GenericOptionsParser(conf,args);
 
-        conf.setJobName("CassandraColumnLoader");
+        conf.setJobName("BMTColumnLoader");
         conf.setMapperClass(Map.class);
         conf.setNumReduceTasks(0);
         conf.setOutputKeyClass(Text.class);
@@ -150,7 +150,7 @@ public class CassandraColumnLoader extends Configured implements Tool {
      *  for free.
      */
     public static void main(String[] args) throws Exception {
-        int res = ToolRunner.run(new Configuration(), new CassandraColumnLoader(), args);
+        int res = ToolRunner.run(new Configuration(), new BMTColumnLoader(), args);
         System.exit(res);
     }
 }
