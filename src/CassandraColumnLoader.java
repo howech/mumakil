@@ -28,30 +28,55 @@ public class CassandraColumnLoader extends Configured implements Tool {
     
     public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<Mutation>> {
         
-        private List<Mutation> wholeRow = new ArrayList<Mutation>();
+        private List<Mutation> rowMutationList = new ArrayList<Mutation>();
         private Integer keyField;
         private String fillValue;
+        private Integer longNames;
         
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] fields = value.toString().split("\t");
-            for(int i = 0; i < fields.length; i++) {
-                if (i != keyField) {
-                    wholeRow.add(getMutation(fields[i], fillValue, System.currentTimeMillis() * 1000));
+            if (longNames == 1) {
+                for(int i = 0; i < fields.length; i++) {
+                    if (i != keyField) {
+                        rowMutationList.add(getMutation(stringToLongBytes(fields[i]), fillValue.getBytes(), System.currentTimeMillis() * 1000));
+                        context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
+                        rowMutationList.clear();
+                    }
+                }
+            } else {
+                for(int i = 0; i < fields.length; i++) {
+                    if (i != keyField) {
+                        rowMutationList.add(getMutation(fields[i].getBytes(), fillValue.getBytes(), System.currentTimeMillis() * 1000));
+                        context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
+                        rowMutationList.clear();
+                    }
                 }
             }
-            context.write(ByteBuffer.wrap(fields[keyField].getBytes()), wholeRow);
-            wholeRow.clear();
         }
 
-        private static Mutation getMutation(String name, String value, Long timeStamp) {
+        private static byte[] stringToLongBytes(String value) {
+            Long longValue = Long.parseLong(value);
+            byte[] asBytes = new byte[ 8 ];
+            asBytes[0] = (byte)(longValue >>> 56);
+            asBytes[1] = (byte)(longValue >>> 48);
+            asBytes[2] = (byte)(longValue >>> 40);
+            asBytes[3] = (byte)(longValue >>> 32);
+            asBytes[4] = (byte)(longValue >>> 24);
+            asBytes[5] = (byte)(longValue >>> 16);
+            asBytes[6] = (byte)(longValue >>>  8);
+            asBytes[7] = (byte)(longValue >>>  0);
+            return asBytes;
+        }
+        
+        private static Mutation getMutation(byte[] name, byte[] value, Long timeStamp) {
             Mutation m = new Mutation();
             m.column_or_supercolumn = getCoSC(name, value, timeStamp);
             return m;
         }
 
-        private static ColumnOrSuperColumn getCoSC(String name, String value, Long timeStamp) {
-            ByteBuffer columnName  = ByteBuffer.wrap(name.getBytes());
-            ByteBuffer columnValue = ByteBuffer.wrap(value.getBytes());
+        private static ColumnOrSuperColumn getCoSC(byte[] name, byte[] value, Long timeStamp) {
+            ByteBuffer columnName  = ByteBuffer.wrap(name);
+            ByteBuffer columnValue = ByteBuffer.wrap(value);
 
             Column c    = new Column();
             c.name      = columnName;
@@ -67,6 +92,8 @@ public class CassandraColumnLoader extends Configured implements Tool {
             Configuration conf = context.getConfiguration();
             this.fillValue    = conf.get("cassandra.fill_value");
             this.keyField     = Integer.parseInt(conf.get("cassandra.row_key_field"));
+            this.longNames    = Integer.parseInt(conf.get("cassandra.longnames"));
+            
         }
     }
     

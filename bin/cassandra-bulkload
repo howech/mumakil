@@ -47,6 +47,7 @@ Settings.define :bmt_keyvalue_insert, :default => false,                        
 Settings.define :table,               :default => false,                               :description => "Uses thrift to insert a flat tab-separated-values table"
 Settings.define :columns,             :default => false,                               :description => "Uses thrift to insert a flat tab-separated-values table with the column names coming from the fields themselves. 'fill_value' is used for all column values"
 Settings.define :keyvalue,            :default => false,                               :description => "Uses thrift to insert a flat tab-separated-values table with exactly three fields"
+Settings.define :longnames,           :default => false,                               :description => "Are the column names LongType?"
 
 # Hadoop options
 Settings.define :min_split_size,   :default => "100000",                            :description => "Hadoop min split size"
@@ -72,6 +73,7 @@ class CassandraBulkLoader
       mainclass,
       reduce_tasks,
       map_tasks,
+      column_names_type,
       "-Dcassandra.config=file://#{options.cassandra_config}",
       "-Dcassandra.keyspace=#{options.ks}",
       "-Dcassandra.column_family=#{options.cf}",
@@ -87,7 +89,7 @@ class CassandraBulkLoader
       "#{options.nil_outfile}"
     ].flatten.compact.join(" \t\\\n  ")
     system %Q{ echo #{hadoop_cmd} }
-    # system %Q{ #{hadoop_cmd} }
+    system %Q{ #{hadoop_cmd} }
   end
 
   def remove_nil_outfile
@@ -130,6 +132,10 @@ class CassandraBulkLoader
     "-Dmapred.map.tasks=#{options.map_tasks}"
   end
 
+  def column_names_type
+    return "-Dcassandra.longnames=0" unless options.longnames
+    return "-Dcassandra.longnames=1"
+  end
 
   def mainclass
     return "CassandraTableLoader"    if options.table
