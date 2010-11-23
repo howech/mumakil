@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 #
 #   Licensed to the Apache Software Foundation (ASF) under one
 #   or more contributor license agreements.  See the NOTICE file
@@ -16,14 +18,12 @@
 #   limitations under the License.
 #
 
-#!/usr/bin/env ruby
-
 require 'rubygems'
 require 'wukong'
 require 'configliere' ; Configliere.use(:commandline, :env_var, :define)
 
-Settings.define :src,            :default => "src",                 :description => "Java source file to compile"
-Settings.define :main_class,     :default => "CassandraBulkLoader", :description => "Main java class to run"
+Settings.define :src,            :default => "src/mumakil",         :description => "Java source file to compile"
+Settings.define :main_class,     :default => "Mumakil",             :description => "Main java class to compile"
 Settings.define :target,         :default => "build",               :description => "Build target, this is where compiled classes live"
 Settings.define :hadoop_home,    :env_var => "HADOOP_HOME",    :default => "/usr/lib/hadoop",                   :description => "Path to hadoop installation"
 Settings.define :cassandra_home, :env_var => "CASSANDRA_HOME", :default => "/home/jacob/Programming/cassandra", :description => "Path to cassandra installation"
@@ -48,7 +48,11 @@ end
 # Returns whitespace separated list of java source files to compile
 #
 def srcs options
-  sources = Dir["#{options.src}/*.java"].inject([]){|sources, src| sources << src; sources}
+  sources = Dir[
+    "#{options.src}/*.java",
+    "#{options.src}/load/*.java",
+    "#{options.src}/dump/*.java"
+  ].inject([]){|sources, src| sources << src; sources}
   sources.join(' ')
 end
 
