@@ -38,7 +38,11 @@ public class CassandraColumnLoader extends Configured implements Tool {
             if (longNames == 1) {
                 for(int i = 0; i < fields.length; i++) {
                     if (i != keyField) {
-                        rowMutationList.add(getMutation(stringToLongBytes(fields[i]), fillValue.getBytes(), System.currentTimeMillis() * 1000));
+                        try {
+                            rowMutationList.add(getMutation(stringToLongBytes(fields[i]), fillValue.getBytes(), System.currentTimeMillis() * 1000));
+                        } catch (NumberFormatException e) {
+                            return;
+                        }
                         context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
                         rowMutationList.clear();
                     }
