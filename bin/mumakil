@@ -1,0 +1,182 @@
+#!/usr/bin/env ruby
+
+#
+#   Licensed to the Apache Software Foundation (ASF) under one
+#   or more contributor license agreements.  See the NOTICE file
+#   distributed with this work for additional information
+#   regarding copyright ownership.  The ASF licenses this file
+#   to you under the Apache License, Version 2.0 (the
+#   "License"); you may not use this file except in compliance
+#   with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+
+require 'rubygems'
+require 'wukong'
+require 'configliere' ; Configliere.use(:commandline, :env_var, :define)
+
+#
+# TODO:
+# Add skipfields as an option.
+#
+
+Settings.define :ks,               :default => "Keyspace1",                    :description => "Keyspace"
+Settings.define :cf,               :default => "Standard1",                    :description => "Column family"
+Settings.define :ts_field,                                                     :description => "Custom timestamp field when inserting. Leave blank to use current time."
+Settings.define :key_field,        :default => "0",                            :description => "Field to use as row key"
+Settings.define :fill_value,       :default => "0",                            :description => "Column value for all columns in 'columns' type insertion"
+Settings.define :longnames,        :default => false,                          :description => "Are the column names LongType?"
+Settings.define :cassandra_home,   :default => "/usr/local/share/cassandra",   :description => "Path to cassandra installation. Reads from CASSANDRA_HOME", :env_var => "CASSANDRA_HOME"
+Settings.define :col_names,        :default => "rsrc,tweet_id,created_at,user_id,screen_name,search_id,in_reply_to_user_id,in_reply_to_screen_name,in_reply_to_search_id,in_reply_to_status_id,text,source,lang,lat,lng,retweeted_count,rt_of_user_id,rt_of_screen_name,rt_of_tweet_id,contributors", :description => "Comma separated list of column names"
+Settings.define :host,             :default => "192.168.1.119",                :description => "Initial cassandra host. Uses this to discover ring"
+Settings.define :port,             :default => "9160",                         :description => "Port on host to send thrift rpc to"
+Settings.define :batch_size,       :default => "1024",                         :description => "Number of rows to pull from Cassandra per range request. Too big and you'll run out of heap space or get timeouts. Too small and overhead of each request will kill perf."
+Settings.define :rm,               :default => false,                          :description => "Remove output file if it already exists?"
+
+Settings.define :loadtable,        :default => false,                          :description => "Insert a flat tab-separated-values table"
+Settings.define :loadcolumns,      :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
+Settings.define :loadmap,          :default => false,                          :description => "Insert a flat tab-separated-values table"
+Settings.define :dumptable,        :default => false,                          :description => "Dump a flat tab-separated-values table"
+Settings.define :dumpcolumns,      :default => false,                          :description => "Dump all columns names in every row"
+Settings.define :dumpmap,          :default => false,                          :description => "Dump map"
+
+# Hadoop options
+Settings.define :min_split_size,   :default => "100000",                       :description => "Hadoop min split size"
+Settings.define :reduce_tasks,     :default => "0",                            :description => "Number of reduce tasks when using keyvalue type insertion"
+Settings.define :map_tasks,                                                    :description => "Suggestion of the number of map tasks per job"
+Settings.define :hadoop_home,      :default => "/usr/lib/hadoop",              :description => "Path to hadoop installation", :env_var => "HADOOP_HOME"
+Settings.resolve!
+
+raise "No input file specified." if Settings.rest.first.blank?
+
+module Mumakil
+
+  class Base
+    attr_accessor :options
+
+    def initialize
+      @options = Settings.dup
+    end
+
+    def execute
+      system %Q{ echo #{hdp_cmd} }
+      # system %Q{ #{hdp_cmd} }
+    end
+
+    def hdp_cmd
+      [
+        "HADOOP_CLASSPATH=#{hadoop_classpath}",
+        "#{options.hadoop_home}/bin/hadoop jar #{run_jar}",
+        mainclass,
+        reduce_tasks,
+        map_tasks,
+        "-Dmapred.min.split.size=#{options.min_split_size}",
+        "-Dcassandra.keyspace=#{options.ks}",
+        "-Dcassandra.column_family=#{options.cf}",
+        "-Dcassandra.col_names=#{options.col_names}",
+        "-Dcassandra.thrift_port=#{options.port}",
+        "-Dcassandra.initial_host=#{options.host}",
+        other_options,
+        "-libjars #{libjars}",
+        "#{options.rest.first}"
+      ].flatten.compact.join(" \t\\\n  ")
+    end
+
+    def hadoop_classpath
+      hdp_cp = []
+      Dir[
+        "#{options.cassandra_home}/lib/*cassandra*.jar",
+        "#{options.cassandra_home}/lib/*thrift*.jar"
+      ].each{|jar| hdp_cp << jar}
+      hdp_cp.join(':')
+    end
+
+    def run_jar
+      File.dirname(File.expand_path(__FILE__))+'/../build/mumakil.jar'
+    end
+
+    def libjars
+      libjars = []
+      Dir[
+        "#{options.cassandra_home}/lib/*.jar"
+      ].each{|jar| libjars << jar}
+      libjars.join(',')
+    end
+
+    def reduce_tasks
+      return unless options.reduce_tasks
+      "-Dmapred.reduce.tasks=#{options.reduce_tasks}"
+    end
+
+    def map_tasks
+      return unless options.map_tasks
+      "-Dmapred.map.tasks=#{options.map_tasks}"
+    end
+  end
+
+  class Load < Base
+
+    def other_options
+      [
+        timestamp,
+        column_names_type,
+        "-Dcassandra.row_key_field=#{options.key_field}",
+        "-Dcassandra.fill_value=#{options.fill_value}"
+      ]
+    end
+
+    def timestamp
+      return unless options.ts_field
+      "-Dcassandra.timestamp_field=#{options.ts_field}"
+    end
+
+    def column_names_type
+      return "-Dcassandra.longnames=0" unless options.longnames
+      return "-Dcassandra.longnames=1"
+    end
+
+    def mainclass
+      return "CassandraTableLoader"    if options.loadtable
+      return "CassandraColumnLoader"   if options.loadcolumns
+      return "CassandraKeyValueLoader" if options.loadkeyvalue
+    end
+
+  end
+
+  class Dump < Base
+
+    def other_options
+    end
+
+    def execute
+      output = options.rest.first
+      remove_output(output) if options.rm
+      super
+    end
+
+    def mainclass
+      return "CassandraTableDump" if options.dumptable
+      return "CassandraNamesDump" if options.dumpcolumns
+    end
+
+    def remove_output output
+      system %Q{ hdp-rm -r #{output} }
+    end
+
+  end
+end
+
+
+if (Settings.loadtable || Settings.loadcolumns || Settings.loadmap)
+  runner = Mumakil::Load.new
+else
+  runner = Mumakil::Dump.new
+end
+runner.execute
