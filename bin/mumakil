@@ -143,9 +143,9 @@ module Mumakil
     end
 
     def mainclass
-      return "CassandraTableLoader"    if options.loadtable
-      return "CassandraColumnLoader"   if options.loadcolumns
-      return "CassandraKeyValueLoader" if options.loadkeyvalue
+      return "LoadTable"   if options.loadtable
+      return "LoadColumns" if options.loadcolumns
+      return "LoadMap"     if options.loadkeyvalue
     end
 
   end
@@ -162,8 +162,8 @@ module Mumakil
     end
 
     def mainclass
-      return "CassandraTableDump" if options.dumptable
-      return "CassandraNamesDump" if options.dumpcolumns
+      return "DumpTable" if options.dumptable
+      return "DumpColumns" if options.dumpcolumns
     end
 
     def remove_output output

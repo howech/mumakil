@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.util.*;
 
-public class CassandraColumnLoader extends Configured implements Tool {
+public class LoadColumns extends Configured implements Tool {
     
     public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<Mutation>> {
         
@@ -103,8 +103,8 @@ public class CassandraColumnLoader extends Configured implements Tool {
     
     public int run(String[] args) throws Exception {
         Job job                    = new Job(getConf()); 
-        job.setJarByClass(CassandraColumnLoader.class);
-        job.setJobName("CassandraColumnLoader");
+        job.setJarByClass(LoadColumns.class);
+        job.setJobName("LoadColumns");
         job.setMapperClass(ColumnFamilyMapper.class);
         job.setNumReduceTasks(0);
 
@@ -130,7 +130,7 @@ public class CassandraColumnLoader extends Configured implements Tool {
     }
 
     public static void main(String[] args) throws Exception {
-        ToolRunner.run(new Configuration(), new CassandraColumnLoader(), args);
+        ToolRunner.run(new Configuration(), new LoadColumns(), args);
         System.exit(0);
     }
 }

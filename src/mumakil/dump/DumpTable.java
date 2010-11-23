@@ -10,7 +10,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.thrift.SlicePredicate;
-import org.apache.cassandra.thrift.SliceRange;
 import org.apache.cassandra.hadoop.ColumnFamilyInputFormat;
 import org.apache.cassandra.hadoop.ConfigHelper;
 
@@ -30,22 +29,22 @@ import org.apache.hadoop.util.*;
   Dumps out select columns from every row in a column family as a tsv file to hdfs.
   
  */
-public class CassandraNamesDump extends Configured implements Tool {
+public class DumpTable extends Configured implements Tool {
     public static class ColumnFamilyMapper extends Mapper<byte[], SortedMap<byte[], IColumn>, Text, Text> {
         public void map(byte[] key, SortedMap<byte[], IColumn> columns, Context context) throws IOException, InterruptedException {
-            String names = "";
+            String fields = "";
             for (IColumn column : columns.values()) {
-                names += new String(column.name());
-                names += "\t";
+                fields += new String(column.value());
+                fields += "\t";
             }
-            context.write(new Text(key), new Text(names));
+            context.write(new Text(key), new Text(fields));
         }
     }
     
     public int run(String[] args) throws Exception {
         Job job                    = new Job(getConf());
-        job.setJarByClass(CassandraNamesDump.class);
-        job.setJobName("CassandraNamesDump");
+        job.setJarByClass(DumpTable.class);
+        job.setJobName("DumpTable");
         job.setNumReduceTasks(0);
         job.setMapperClass(ColumnFamilyMapper.class);        
         job.setInputFormatClass(ColumnFamilyInputFormat.class);
@@ -58,11 +57,13 @@ public class CassandraNamesDump extends Configured implements Tool {
         ConfigHelper.setInitialAddress(conf, conf.get("cassandra.initial_host"));
         ConfigHelper.setInputColumnFamily(conf, conf.get("cassandra.keyspace"), conf.get("cassandra.column_family"));
 
-        SlicePredicate predicate = new SlicePredicate();
-        SliceRange sliceRange = new SliceRange();
-        sliceRange.setStart(new byte[0]);
-        sliceRange.setFinish(new byte[0]);
-        predicate.setSlice_range(sliceRange);
+        // Build a slice predicate from comma separated list of column names
+        String[] columnNames = conf.get("cassandra.column_names").split(",");
+        List<byte[]> col_names = new ArrayList<byte[]>();
+        for(String name : columnNames) {
+            col_names.add(name.getBytes());
+        }
+        SlicePredicate predicate = new SlicePredicate().setColumn_names(col_names);
         ConfigHelper.setInputSlicePredicate(conf, predicate);
 
         // Handle output path
@@ -78,7 +79,7 @@ public class CassandraNamesDump extends Configured implements Tool {
     }
 
     public static void main(String[] args) throws Exception {
-        ToolRunner.run(new Configuration(), new CassandraNamesDump(), args);
+        ToolRunner.run(new Configuration(), new DumpTable(), args);
         System.exit(0);
     }
 }

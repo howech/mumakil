@@ -29,7 +29,7 @@ import org.apache.hadoop.util.*;
   Dumps out select columns from every row in a column family as a tsv file to hdfs.
   
  */
-public class CassandraTableLoader extends Configured implements Tool {
+public class LoadTable extends Configured implements Tool {
     
     public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<Mutation>> {
         
@@ -94,8 +94,8 @@ public class CassandraTableLoader extends Configured implements Tool {
     
     public int run(String[] args) throws Exception {
         Job job                    = new Job(getConf()); 
-        job.setJarByClass(CassandraTableLoader.class);
-        job.setJobName("CassandraTableLoader");
+        job.setJarByClass(LoadTable.class);
+        job.setJobName("LoadTable");
         job.setMapperClass(ColumnFamilyMapper.class);
         job.setNumReduceTasks(0);
 
@@ -121,7 +121,7 @@ public class CassandraTableLoader extends Configured implements Tool {
     }
 
     public static void main(String[] args) throws Exception {
-        ToolRunner.run(new Configuration(), new CassandraTableLoader(), args);
+        ToolRunner.run(new Configuration(), new LoadTable(), args);
         System.exit(0);
     }
 }
