@@ -1,7 +1,7 @@
-h1. Cassandra Bulk Interface
+h1. Mumakil
 
-A simplfied bulk interface to Cassandra that makes use of Hadoop. There is some support for using the binary memtable interface but this is experimental and should be used with caution.
-
+Mumakil is a set of command line utilies that make use of Hadoop to provide a bulk interface to Cassandra.
+ 
 
 h2. Insert a flat tsv table
 
@@ -22,3 +22,7 @@ As is often the case with a graph you'll have something like an adjacency list (
 h3. Insert a map
 
 Also quite common, and the use case Cassandra addresses rather well. (key, column_name, column_value)
+
+h3. Why Mumakil?
+
+Mumakil (plural for mumak) are the massive four tusked war elephants from Lord of The Rings.
