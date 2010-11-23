@@ -33,7 +33,7 @@ public class LoadTable extends Configured implements Tool {
     
     public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<Mutation>> {
         
-        private List<Mutation> wholeRow = new ArrayList<Mutation>();
+        private List<Mutation> rowMutationList = new ArrayList<Mutation>();
         private Integer keyField;
         private Integer tsField;
         private String[] fieldNames;
@@ -50,11 +50,11 @@ public class LoadTable extends Configured implements Tool {
             
             for(int i = 0; i < fields.length; i++) {
                 if (i < fieldNames.length && i != keyField) {
-                    wholeRow.add(getMutation(fieldNames[i], fields[i], timeStamp));
+                    rowMutationList.add(getMutation(fieldNames[i], fields[i], timeStamp));
+                    context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
+                    rowMutationList.clear();
                 }
             }
-            context.write(ByteBuffer.wrap(fields[keyField].getBytes()), wholeRow);
-            wholeRow.clear();
         }
 
         private static Mutation getMutation(String name, String value, Long timeStamp) {

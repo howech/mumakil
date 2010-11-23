@@ -27,32 +27,44 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.*;
 
-/*
-  
-  Dumps out select columns from every row in a column family as a tsv file to hdfs.
-  
- */
-public class DumpColumnNames extends Configured implements Tool {
+public class DumpSuperMap extends Configured implements Tool {
     public static class ColumnFamilyMapper extends Mapper<byte[], SortedMap<byte[], IColumn>, Text, Text> {
         
         private Integer longNames;
         
         public void map(byte[] key, SortedMap<byte[], IColumn> columns, Context context) throws IOException, InterruptedException {
-            String names = "";
+            String fields = "";
             if(longNames == 1) {
-                for (IColumn column : columns.values()) {
-                    ByteArrayInputStream bis = new ByteArrayInputStream(column.name());
-                    DataInputStream dis      = new DataInputStream(bis);
-                    names += dis.readLong();
-                    names += "\t";
+                for (IColumn superColumn : columns.values()) {
+                    ByteArrayInputStream scolNameBis = new ByteArrayInputStream(superColumn.name());
+                    DataInputStream scolNameDis      = new DataInputStream(scolNameBis);
+                    Long superColName               = scolNameDis.readLong();
+                    for(IColumn column : superColumn.getSubColumns()) {
+                        ByteArrayInputStream colNameBis = new ByteArrayInputStream(column.name());
+                        DataInputStream colNameDis      = new DataInputStream(colNameBis);
+                        fields = "";
+                        fields += superColName;
+                        fields += "\t";
+                        fields += colNameDis.readLong();
+                        fields += "\t";
+                        fields += new String(column.value());
+                        context.write(new Text(key), new Text(fields));
+                    }
                 }
             } else {
-                for (IColumn column : columns.values()) {
-                    names += new String(column.name());
-                    names += "\t";
+                for (IColumn superColumn : columns.values()) {
+                    String superColName = new String(superColumn.name());
+                    for(IColumn column : superColumn.getSubColumns()) {
+                        fields = "";
+                        fields += superColName;
+                        fields += "\t";
+                        fields += new String(column.name());
+                        fields += "\t";
+                        fields += new String(column.value());
+                        context.write(new Text(key), new Text(fields));
+                    }
                 }
             }
-            context.write(new Text(key), new Text(names));
         }
 
         protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {
@@ -64,8 +76,8 @@ public class DumpColumnNames extends Configured implements Tool {
     
     public int run(String[] args) throws Exception {
         Job job                    = new Job(getConf());
-        job.setJarByClass(DumpColumnNames.class);
-        job.setJobName("DumpColumnNames");
+        job.setJarByClass(DumpSuperMap.class);
+        job.setJobName("DumpSuperMap");
         job.setNumReduceTasks(0);
         job.setMapperClass(ColumnFamilyMapper.class);        
         job.setInputFormatClass(ColumnFamilyInputFormat.class);
@@ -98,7 +110,7 @@ public class DumpColumnNames extends Configured implements Tool {
     }
 
     public static void main(String[] args) throws Exception {
-        ToolRunner.run(new Configuration(), new DumpColumnNames(), args);
+        ToolRunner.run(new Configuration(), new DumpSuperMap(), args);
         System.exit(0);
     }
 }

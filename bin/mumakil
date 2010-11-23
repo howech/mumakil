@@ -43,8 +43,10 @@ Settings.define :rm,               :default => false,                          :
 Settings.define :loadtable,        :default => false,                          :description => "Insert a flat tab-separated-values table"
 Settings.define :loadcolumns,      :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
 Settings.define :loadmap,          :default => false,                          :description => "Insert a flat tab-separated-values table"
+Settings.define :loadsupermap,     :default => false,                          :description => "Insert a map of super columns (row_key, super_col_name, {(col_name,col_val), ...})"
 Settings.define :dumptable,        :default => false,                          :description => "Dump a flat tab-separated-values table"
 Settings.define :dumpcolumns,      :default => false,                          :description => "Dump all columns names in every row"
+Settings.define :dumpsupermap,     :default => false,                          :description => "Dump all super columns in a row after first flattening"
 Settings.define :dumpmap,          :default => false,                          :description => "Dump map"
 
 # Hadoop options
@@ -67,7 +69,7 @@ module Mumakil
 
     def execute
       system %Q{ echo #{hdp_cmd} }
-      # system %Q{ #{hdp_cmd} }
+      system %Q{ #{hdp_cmd} }
     end
 
     def hdp_cmd
@@ -77,6 +79,7 @@ module Mumakil
         mainclass,
         reduce_tasks,
         map_tasks,
+        column_names_type,
         "-Dmapred.min.split.size=#{options.min_split_size}",
         "-Dcassandra.keyspace=#{options.ks}",
         "-Dcassandra.column_family=#{options.cf}",
@@ -92,8 +95,8 @@ module Mumakil
     def hadoop_classpath
       hdp_cp = []
       Dir[
-        "#{options.cassandra_home}/lib/*cassandra*.jar",
-        "#{options.cassandra_home}/lib/*thrift*.jar"
+        "#{options.cassandra_home}/lib/*.jar",
+        # "#{options.cassandra_home}/lib/*thrift*.jar"
       ].each{|jar| hdp_cp << jar}
       hdp_cp.join(':')
     end
@@ -119,6 +122,12 @@ module Mumakil
       return unless options.map_tasks
       "-Dmapred.map.tasks=#{options.map_tasks}"
     end
+
+    def column_names_type
+      return "-Dcassandra.longnames=0" unless options.longnames
+      return "-Dcassandra.longnames=1"
+    end
+
   end
 
   class Load < Base
@@ -126,7 +135,6 @@ module Mumakil
     def other_options
       [
         timestamp,
-        column_names_type,
         "-Dcassandra.row_key_field=#{options.key_field}",
         "-Dcassandra.fill_value=#{options.fill_value}"
       ]
@@ -137,15 +145,11 @@ module Mumakil
       "-Dcassandra.timestamp_field=#{options.ts_field}"
     end
 
-    def column_names_type
-      return "-Dcassandra.longnames=0" unless options.longnames
-      return "-Dcassandra.longnames=1"
-    end
-
     def mainclass
-      return "LoadTable"   if options.loadtable
-      return "LoadColumns" if options.loadcolumns
-      return "LoadMap"     if options.loadkeyvalue
+      return "LoadTable"          if options.loadtable
+      return "LoadColumns"        if options.loadcolumns
+      return "LoadMap"            if options.loadmap
+      return "LoadSuperColumnMap" if options.loadsupermap
     end
 
   end
@@ -153,6 +157,9 @@ module Mumakil
   class Dump < Base
 
     def other_options
+      [
+        "-Dcassandra.batch_size=#{options.batch_size}"
+      ]
     end
 
     def execute
@@ -162,8 +169,9 @@ module Mumakil
     end
 
     def mainclass
-      return "DumpTable" if options.dumptable
-      return "DumpColumns" if options.dumpcolumns
+      return "DumpTable"       if options.dumptable
+      return "DumpColumnNames" if options.dumpcolumns
+      return "DumpSuperMap"    if options.dumpsupermap
     end
 
     def remove_output output
@@ -174,7 +182,7 @@ module Mumakil
 end
 
 
-if (Settings.loadtable || Settings.loadcolumns || Settings.loadmap)
+if (Settings.loadtable || Settings.loadcolumns || Settings.loadmap || Settings.loadsupermap)
   runner = Mumakil::Load.new
 else
   runner = Mumakil::Dump.new
