@@ -40,11 +40,9 @@ public class LoadColumns extends Configured implements Tool {
                     if (i != keyField) {
                         try {
                             rowMutationList.add(getMutation(stringToLongBytes(fields[i]), fillValue.getBytes(), System.currentTimeMillis() * 1000));
-                        } catch (NumberFormatException e) {
-                            return;
-                        }
-                        context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
-                        rowMutationList.clear();
+                            context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
+                            rowMutationList.clear();
+                        } catch (NumberFormatException e) {}
                     }
                 }
             } else {

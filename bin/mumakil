@@ -83,7 +83,7 @@ module Mumakil
         "-Dmapred.min.split.size=#{options.min_split_size}",
         "-Dcassandra.keyspace=#{options.ks}",
         "-Dcassandra.column_family=#{options.cf}",
-        "-Dcassandra.col_names=#{options.col_names}",
+        "-Dcassandra.column_names=#{options.col_names}",
         "-Dcassandra.thrift_port=#{options.port}",
         "-Dcassandra.initial_host=#{options.host}",
         other_options,
