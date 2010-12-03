@@ -148,7 +148,7 @@ module Mumakil
     def mainclass
       return "LoadTable"          if options.loadtable
       return "LoadColumns"        if options.loadcolumns
-      return "LoadMap"            if options.loadmap
+      return "LoadColumnMap"      if options.loadmap
       return "LoadSuperColumnMap" if options.loadsupermap
     end
 
