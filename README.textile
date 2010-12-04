@@ -8,7 +8,7 @@ h2. Insert a flat tsv table
 This is by far the most common use case. Suppose you have a flat tab-separated-values table on the hdfs with fields (user_id, screen_name, ip_address). To insert such a table do:
 
 <pre><code>
-  bin/cassandra-bulkload --host=<ip_of_some_cassandra_seed> --loadtable --ks=MyKeySpace --cf=MyColumnFamily --col_names=user_id,screen_name,ip_address /path/to/tsv-table
+  bin/mumakil --host=<ip_of_some_cassandra_seed> --loadtable --ks=MyKeySpace --cf=MyColumnFamily --col_names=user_id,screen_name,ip_address /path/to/tsv-table
 </code></pre>
 
 h2. Insert a flat table with a filler value.
@@ -16,7 +16,7 @@ h2. Insert a flat table with a filler value.
 As is often the case with a graph you'll have something like an adjacency list (node_id, {v1,v2,...,vn}). If it's just a flat graph (no edge metadata) then simply do:
 
 <pre><code>
-  bin/cassandra-bulkload --host=<ip_of_some_cassandra_seed> --loadcolumns --ks=MyGraphKeyspace --cf=MyGraphColumnFamily /path/to/adj-list
+  bin/mumakil --host=<ip_of_some_cassandra_seed> --loadcolumns --ks=MyGraphKeyspace --cf=MyGraphColumnFamily /path/to/adj-list
 </code></pre>
 
 h3. Insert a map
@@ -24,10 +24,10 @@ h3. Insert a map
 Also quite common, and the use case Cassandra addresses rather well. Loads a tab separated dataset of the form (row_key, json_hash) where @json_hash@ is assumed to be a flat json hash of (column name, column value) pairs.
 
 <pre><code>
-  bin/cassandra-bulkload --host=<ip_of_some_cassandra_seed> --loadmap --ks=MyKeyspace --cf=MyColumnFamily /path/to/adj-list
+  bin/mumakil --host=<ip_of_some_cassandra_seed> --loadmap --ks=MyKeyspace --cf=MyColumnFamily /path/to/input_data
 </code></pre>
 
-If your data isn't already in this form there is wukong script in the examples directory that takes input of the form (row_key,column_name,column_value) and produces output necessary for the map loader. 
+If your data isn't already in this form there is a wukong script in the examples directory that takes input of the form (row_key,column_name,column_value) and produces output necessary for the map loader. 
 
 h3. Why Mumakil?
 
