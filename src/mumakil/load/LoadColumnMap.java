@@ -54,9 +54,13 @@ public class LoadColumnMap extends Configured implements Tool {
 
             if(longNames == 1) {
                 for(Map.Entry pair: columns.entrySet()) {
-                    rowMutationList.add(getMutation(stringToLongBytes(pair.getKey().toString()), pair.getValue().toString().getBytes(), System.currentTimeMillis() * 1000));
-                    context.write(rowKey, rowMutationList);
-                    rowMutationList.clear();
+                    try {
+                        rowMutationList.add(getMutation(stringToLongBytes(pair.getKey().toString()), pair.getValue().toString().getBytes(), System.currentTimeMillis() * 1000));
+                        context.write(rowKey, rowMutationList);
+                        rowMutationList.clear();
+                    } catch (NumberFormatException e) {
+                        System.out.println("Bad Record: row_key: ["+fields[0]+"], column_name: ["+pair.getKey().toString()+"] ");
+                    }
                 }
             } else {
                 for(Map.Entry pair: columns.entrySet()) {

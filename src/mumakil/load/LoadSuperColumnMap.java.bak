@@ -26,46 +26,34 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.util.*;
 
-import org.codehaus.jackson.map.ObjectMapper;
-
 public class LoadSuperColumnMap extends Configured implements Tool {
     
     public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<Mutation>> {
         
         private List<Mutation> rowMutationList = new ArrayList<Mutation>();
 
-        private ObjectMapper jsonParser;
         private Integer longNames;
         
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields             = value.toString().split("\t");
-            ByteBuffer rowKey           = ByteBuffer.wrap(fields[0].getBytes());
-            SuperColumnMap superColumns = jsonParser.readValue(fields[1], SuperColumnMap.class);
-
-            
+            String[] fields      = value.toString().split("\t");
+            ByteBuffer rowKey    = ByteBuffer.wrap(fields[0].getBytes());
             if(longNames == 1) {
-                for(Map.Entry superColumn : superColumns.entrySet()) {
+                byte[] superColName = stringToLongBytes(fields[1]);
+                for(int i = 2; i < fields.length-1; i += 2) {
                     try {
-                        byte[] superColName  = stringToLongBytes(superColumn.getKey().toString());
-                        HashMap<String,String> column       = (HashMap)superColumn.getValue();
-                        for(Map.Entry pair : column.entrySet()) {
-                            rowMutationList.add(getSuperMutation(superColName, stringToLongBytes(pair.getKey().toString()), pair.getValue().toString().getBytes(), System.currentTimeMillis() * 1000));
-                            context.write(rowKey, rowMutationList);
-                            rowMutationList.clear();
-                        }
+                        rowMutationList.add(getSuperMutation(superColName, stringToLongBytes(fields[i]), fields[i+1].getBytes(), System.currentTimeMillis() * 1000));
                     } catch (NumberFormatException e) {
-                        System.out.println("Bad Record: row_key: ["+fields[0]+"], super_column_name: ["+superColumn.getKey().toString()+"]");
+                        return;
                     }
+                    context.write(rowKey, rowMutationList);
+                    rowMutationList.clear();
                 }
             } else {
-                for(Map.Entry superColumn : superColumns.entrySet()) {
-                    byte[] superColName  = superColumn.getKey().toString().getBytes();
-                    HashMap<String,String> column = (HashMap)superColumn.getValue();
-                    for(Map.Entry pair : column.entrySet()) {
-                        rowMutationList.add(getSuperMutation(superColName, pair.getKey().toString().getBytes(), pair.getValue().toString().getBytes(), System.currentTimeMillis() * 1000));
-                        context.write(rowKey, rowMutationList);
-                        rowMutationList.clear();
-                    }
+                byte[] superColName  = fields[1].getBytes();
+                for(int i = 2; i < fields.length-1; i += 2) {
+                    rowMutationList.add(getSuperMutation(superColName, fields[i].getBytes(), fields[i+1].getBytes(), System.currentTimeMillis() * 1000));
+                    context.write(rowKey, rowMutationList);
+                    rowMutationList.clear();
                 }
             }
         }
@@ -111,7 +99,6 @@ public class LoadSuperColumnMap extends Configured implements Tool {
         protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {
             Configuration conf = context.getConfiguration();
             this.longNames    = Integer.parseInt(conf.get("cassandra.longnames"));
-            this.jsonParser   = new ObjectMapper();
         }
     }
     
