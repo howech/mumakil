@@ -3,6 +3,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.io.DataInputStream;
 import java.io.ByteArrayInputStream;
+import org.apache.commons.lang.ArrayUtils;
 
 import org.apache.cassandra.avro.Column;
 import org.apache.cassandra.avro.ColumnOrSuperColumn;
@@ -78,11 +79,9 @@ public class DumpColumnNames extends Configured implements Tool {
         ConfigHelper.setInitialAddress(conf, conf.get("cassandra.initial_host"));
         ConfigHelper.setInputColumnFamily(conf, conf.get("cassandra.keyspace"), conf.get("cassandra.column_family"));
 
-        SlicePredicate predicate = new SlicePredicate();
-        SliceRange sliceRange = new SliceRange();
-        sliceRange.setStart(new byte[0]);
-        sliceRange.setFinish(new byte[0]);
-        predicate.setSlice_range(sliceRange);
+        SliceRange range = new SliceRange(ArrayUtils.EMPTY_BYTE_ARRAY, ArrayUtils.EMPTY_BYTE_ARRAY, false, Integer.MAX_VALUE);
+        SlicePredicate predicate = new SlicePredicate().setColumn_names(null).setSlice_range(range);
+       
         ConfigHelper.setInputSlicePredicate(conf, predicate);
 
         // Handle output path
