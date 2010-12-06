@@ -45,7 +45,15 @@ public class LoadTable extends Configured implements Tool {
             if (tsField == -1) {
                 timeStamp = System.currentTimeMillis() * 1000;
             } else {
-                timeStamp = Long.parseLong(fields[tsField]);
+                try {
+                    timeStamp = Long.parseLong(fields[tsField]);
+                } catch (NumberFormatException e) {
+                    System.out.println("Bad timestamp: ["+fields[tsField]+"], using current time");
+                    timeStamp = System.currentTimeMillis() * 1000;
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    System.out.println("Timestamp field: ["+tsField+"] doesn't exist, using current time");
+                    timeStamp = System.currentTimeMillis() * 1000;
+                }
             }
             
             for(int i = 0; i < fields.length; i++) {
@@ -80,7 +88,7 @@ public class LoadTable extends Configured implements Tool {
         protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {
             Configuration conf = context.getConfiguration();
             
-            this.fieldNames   = conf.get("cassandra.col_names").split(",");
+            this.fieldNames   = conf.get("cassandra.column_names").split(",");
             this.keyField     = Integer.parseInt(conf.get("cassandra.row_key_field"));
 
             /* Deal with custom timestamp field */
