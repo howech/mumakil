@@ -51,7 +51,8 @@ def srcs options
   sources = Dir[
     "#{options.src}/*.java",
     "#{options.src}/load/*.java",
-    "#{options.src}/dump/*.java"
+    "#{options.src}/dump/*.java",
+    "#{options.src}/utils/*.java"
   ].inject([]){|sources, src| sources << src; sources}
   sources.join(' ')
 end

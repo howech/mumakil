@@ -58,31 +58,11 @@ public class LoadTable extends Configured implements Tool {
             
             for(int i = 0; i < fields.length; i++) {
                 if (i < fieldNames.length && i != keyField) {
-                    rowMutationList.add(getMutation(fieldNames[i], fields[i], timeStamp));
+                    rowMutationList.add(CassandraUtils.getMutation(fieldNames[i], fields[i], timeStamp));
                     context.write(ByteBuffer.wrap(fields[keyField].getBytes()), rowMutationList);
                     rowMutationList.clear();
                 }
             }
-        }
-
-        private static Mutation getMutation(String name, String value, Long timeStamp) {
-            Mutation m = new Mutation();
-            m.column_or_supercolumn = getCoSC(name, value, timeStamp);
-            return m;
-        }
-
-        private static ColumnOrSuperColumn getCoSC(String name, String value, Long timeStamp) {
-            ByteBuffer columnName  = ByteBuffer.wrap(name.getBytes());
-            ByteBuffer columnValue = ByteBuffer.wrap(value.getBytes());
-
-            Column c    = new Column();
-            c.name      = columnName;
-            c.value     = columnValue;
-            c.timestamp = timeStamp;
-            c.ttl       = 0;
-            ColumnOrSuperColumn cosc = new ColumnOrSuperColumn();
-            cosc.column = c;
-            return cosc;
         }
 
         protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {

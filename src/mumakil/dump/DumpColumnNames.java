@@ -58,7 +58,7 @@ public class DumpColumnNames extends Configured implements Tool {
 
         protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {
             Configuration conf = context.getConfiguration();
-            this.longNames    = Integer.parseInt(conf.get("cassandra.longnames"));
+            this.longNames     = Integer.parseInt(conf.get("cassandra.longnames"));
         }
 
     }
