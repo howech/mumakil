@@ -1,0 +1,4 @@
+* Understand how a table is dumped (are the fields in the order you pass in col_names?)
+* Use conventional logging just as soon as I learn the java way for actually doing it (anyone want to share how?)
+* Use counters to indicate bad records etc
+* --skipfields
