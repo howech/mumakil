@@ -42,6 +42,7 @@ Settings.define :rm,               :default => false,                          :
 
 Settings.define :loadtable,        :default => false,                          :description => "Insert a flat tab-separated-values table"
 Settings.define :loadcolumns,      :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
+Settings.define :loadhectorcolumns,      :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
 Settings.define :loadmap,          :default => false,                          :description => "Insert a flat tab-separated-values table"
 Settings.define :loadsupermap,     :default => false,                          :description => "Insert a map of super columns (row_key, super_col_name, {(col_name,col_val), ...})"
 Settings.define :dumptable,        :default => false,                          :description => "Dump a flat tab-separated-values table"
@@ -54,6 +55,7 @@ Settings.define :min_split_size,   :default => "100000",                       :
 Settings.define :reduce_tasks,     :default => "0",                            :description => "Number of reduce tasks when using keyvalue type insertion"
 Settings.define :map_tasks,                                                    :description => "Suggestion of the number of map tasks per job"
 Settings.define :hadoop_home,      :default => "/usr/lib/hadoop",              :description => "Path to hadoop installation", :env_var => "HADOOP_HOME"
+Settings.define :hector_home,      :default => "/usr/local/share/hector",      :description => "Path to hector installation", :env_var => "HECTOR_HOME"
 Settings.resolve!
 
 raise "No input file specified." if Settings.rest.first.blank?
@@ -96,6 +98,7 @@ module Mumakil
       hdp_cp = []
       Dir[
         "#{options.cassandra_home}/lib/*.jar",
+        "#{options.hector_home}/*.jar"
         # "#{options.cassandra_home}/lib/*thrift*.jar"
       ].each{|jar| hdp_cp << jar}
       hdp_cp.join(':')
@@ -108,7 +111,8 @@ module Mumakil
     def libjars
       libjars = []
       Dir[
-        "#{options.cassandra_home}/lib/*.jar"
+        "#{options.cassandra_home}/lib/*.jar",
+        "#{options.hector_home}/*.jar"
       ].each{|jar| libjars << jar}
       libjars.join(',')
     end
@@ -150,6 +154,7 @@ module Mumakil
       return "LoadColumns"        if options.loadcolumns
       return "LoadColumnMap"      if options.loadmap
       return "LoadSuperColumnMap" if options.loadsupermap
+      return "LoadHectorColumns"  if options.loadhectorcolumns
     end
 
   end
@@ -182,7 +187,7 @@ module Mumakil
 end
 
 
-if (Settings.loadtable || Settings.loadcolumns || Settings.loadmap || Settings.loadsupermap)
+if (Settings.loadtable || Settings.loadcolumns || Settings.loadmap || Settings.loadsupermap || Settings.loadhectorcolumns)
   runner = Mumakil::Load.new
 else
   runner = Mumakil::Dump.new

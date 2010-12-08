@@ -27,6 +27,7 @@ Settings.define :main_class,     :default => "Mumakil",             :description
 Settings.define :target,         :default => "build",               :description => "Build target, this is where compiled classes live"
 Settings.define :hadoop_home,    :env_var => "HADOOP_HOME",    :default => "/usr/lib/hadoop",                   :description => "Path to hadoop installation"
 Settings.define :cassandra_home, :env_var => "CASSANDRA_HOME", :default => "/home/jacob/Programming/cassandra", :description => "Path to cassandra installation"
+Settings.define :hector_home,    :env_var => "HECTOR_HOME",    :default => "/usr/local/share/hector",           :description => "Path to hector installation"
 
 Settings.resolve!
 options = Settings.dup
@@ -39,7 +40,8 @@ def classpath options
   Dir[
     "#{options.hadoop_home}/hadoop*.jar",
     "#{options.hadoop_home}/lib/*.jar",
-    "#{options.cassandra_home}/lib/*.jar"
+    "#{options.cassandra_home}/lib/*.jar",
+    "#{options.hector_home}/*.jar"
   ].each{|jar| cp << jar}
   cp.join(':')
 end
@@ -52,7 +54,8 @@ def srcs options
     "#{options.src}/*.java",
     "#{options.src}/load/*.java",
     "#{options.src}/dump/*.java",
-    "#{options.src}/utils/*.java"
+    "#{options.src}/utils/*.java",
+    "#{options.src}/hector/*.java"
   ].inject([]){|sources, src| sources << src; sources}
   sources.join(' ')
 end
