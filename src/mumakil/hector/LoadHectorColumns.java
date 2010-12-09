@@ -26,6 +26,9 @@ import org.apache.hadoop.util.*;
 import me.prettyprint.cassandra.serializers.LongSerializer;
 import me.prettyprint.cassandra.serializers.StringSerializer;
 import me.prettyprint.cassandra.service.CassandraHostConfigurator;
+import me.prettyprint.cassandra.model.AllOneConsistencyLevelPolicy;
+
+import me.prettyprint.hector.api.ConsistencyLevelPolicy;
 import me.prettyprint.hector.api.Cluster;
 import me.prettyprint.hector.api.Keyspace;
 import me.prettyprint.hector.api.beans.HColumn;
@@ -40,7 +43,7 @@ public class LoadHectorColumns extends Configured implements Tool {
         BAD
     }
 
-    public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, ByteBuffer, List<String>> {
+    public static class ColumnFamilyMapper extends Mapper<LongWritable, Text, Text, Text> {
 
         private Cluster  cluster;
         private Keyspace keyspace;
@@ -102,11 +105,13 @@ public class LoadHectorColumns extends Configured implements Tool {
             CassandraHostConfigurator cassHostConfig = new CassandraHostConfigurator();
             cassHostConfig.setHosts(conf.get("cassandra.initial_host")); // takes a list of hosts
             cassHostConfig.setPort(Integer.parseInt(conf.get("cassandra.thrift_port")));
-            cassHostConfig.setAutoDiscoverHosts(true);
-            cluster  = HFactory.getOrCreateCluster("Magilla", cassHostConfig);
+            // cassHostConfig.setAutoDiscoverHosts(true);
+            cluster  = HFactory.getOrCreateCluster("magilla", cassHostConfig);
             keyspace = HFactory.createKeyspace(conf.get("cassandra.keyspace"), cluster );
+            ConsistencyLevelPolicy allOne = new AllOneConsistencyLevelPolicy();
+            keyspace.setConsistencyLevelPolicy( allOne );
 
-            keySerializer = StringSerializer.get();
+            keySerializer   = StringSerializer.get();
             valueSerializer = StringSerializer.get();
             
             longNames = "1".equals(conf.get("cassandra.longnames"));

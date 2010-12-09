@@ -42,7 +42,7 @@ Settings.define :rm,               :default => false,                          :
 
 Settings.define :loadtable,        :default => false,                          :description => "Insert a flat tab-separated-values table"
 Settings.define :loadcolumns,      :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
-Settings.define :loadhectorcolumns,      :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
+Settings.define :loadhectorcolumns, :default => false,                          :description => "Insert a flat tab-separated-values table with the column names coming from the fields themselves."
 Settings.define :loadmap,          :default => false,                          :description => "Insert a flat tab-separated-values table"
 Settings.define :loadsupermap,     :default => false,                          :description => "Insert a map of super columns (row_key, super_col_name, {(col_name,col_val), ...})"
 Settings.define :dumptable,        :default => false,                          :description => "Dump a flat tab-separated-values table"
